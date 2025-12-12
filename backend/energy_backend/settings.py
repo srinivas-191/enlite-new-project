@@ -5,7 +5,6 @@ Django settings for energy_backend project.
 from pathlib import Path
 import os
 from dotenv import load_dotenv
-
 load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -15,9 +14,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # -------------------
 
 SECRET_KEY = os.getenv("SECRET_KEY", "unsafe-default-key")
-
-# DEBUG controlled by environment variable
-DEBUG = os.getenv("DEBUG", "False") == "True"
+DEBUG = True
 
 ALLOWED_HOSTS = ["*"]
 
@@ -32,14 +29,12 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-
+     'rest_framework.authtoken',
     "corsheaders",
     "rest_framework",
-    'rest_framework.authtoken',
 
     'energy_api',
 ]
-
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "rest_framework.authentication.TokenAuthentication",
@@ -68,10 +63,6 @@ MIDDLEWARE = [
 
 CORS_ALLOW_ALL_ORIGINS = True
 
-# -------------------
-# URLS / WSGI
-# -------------------
-
 ROOT_URLCONF = 'energy_backend.urls'
 
 TEMPLATES = [
@@ -92,7 +83,7 @@ TEMPLATES = [
 WSGI_APPLICATION = 'energy_backend.wsgi.application'
 
 # -------------------
-# DATABASE (SQLite only — Railway supports this)
+# DATABASE (SQLite only — no external DB)
 # -------------------
 
 DATABASES = {
@@ -121,29 +112,22 @@ USE_TZ = True
 # STATIC FILES FOR RAILWAY
 # -------------------
 
+# STATIC FILES FOR RAILWAY
+# -------------------
+
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
-# Django 4.2+ compatible Whitenoise storage configuration
-STORAGES = {
-    "staticfiles": {
-        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
-    },
-}
+STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
 # -------------------
-# MEDIA FILES (User uploads)
+# MEDIA FILES (For user uploads like screenshots)
 # -------------------
+# This is the public URL prefix for accessing media files
+MEDIA_URL = '/media/' 
 
-MEDIA_URL = '/media/'
-MEDIA_ROOT = BASE_DIR / 'media'
-
-# -------------------
-# SECURITY FOR PRODUCTION (Railway)
-# -------------------
-
-if not DEBUG:
-    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
-    CSRF_TRUSTED_ORIGINS = ["https://*.railway.app"]
+# This is the absolute path to the directory where media files will be stored.
+# It will resolve to: /path/to/enlite-project/enlite-main/media/
+MEDIA_ROOT = BASE_DIR / 'media' 
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
