@@ -61,7 +61,7 @@ export default function Navbar() {
             alt="logo"
             className="w-9 h-9 rounded-full border border-gray-300 shadow-sm"
           />
-          Enlite
+          Enlites
         </NavLink>
 
         {/* DESKTOP MENU */}
