@@ -5,6 +5,7 @@ Django settings for energy_backend project.
 from pathlib import Path
 import os
 from dotenv import load_dotenv
+
 load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -14,7 +15,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # -------------------
 
 SECRET_KEY = os.getenv("SECRET_KEY", "unsafe-default-key")
-DEBUG = True
+
+# DEBUG controlled by environment variable
+DEBUG = os.getenv("DEBUG", "False") == "True"
 
 ALLOWED_HOSTS = ["*"]
 
@@ -29,12 +32,14 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-     'rest_framework.authtoken',
+
     "corsheaders",
     "rest_framework",
+    'rest_framework.authtoken',
 
     'energy_api',
 ]
+
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "rest_framework.authentication.TokenAuthentication",
@@ -63,6 +68,10 @@ MIDDLEWARE = [
 
 CORS_ALLOW_ALL_ORIGINS = True
 
+# -------------------
+# URLS / WSGI
+# -------------------
+
 ROOT_URLCONF = 'energy_backend.urls'
 
 TEMPLATES = [
@@ -83,7 +92,7 @@ TEMPLATES = [
 WSGI_APPLICATION = 'energy_backend.wsgi.application'
 
 # -------------------
-# DATABASE (SQLite only — no external DB)
+# DATABASE (SQLite only — Railway supports this)
 # -------------------
 
 DATABASES = {
@@ -115,6 +124,26 @@ USE_TZ = True
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
-STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
+# Django 4.2+ compatible Whitenoise storage configuration
+STORAGES = {
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    },
+}
+
+# -------------------
+# MEDIA FILES (User uploads)
+# -------------------
+
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'
+
+# -------------------
+# SECURITY FOR PRODUCTION (Railway)
+# -------------------
+
+if not DEBUG:
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+    CSRF_TRUSTED_ORIGINS = ["https://*.railway.app"]
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'

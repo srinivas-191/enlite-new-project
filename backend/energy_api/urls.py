@@ -1,6 +1,7 @@
 from django.urls import path
 from django.conf import settings
 from django.conf.urls.static import static
+from . import views
 
 from .views import (
     # Basic model endpoints
@@ -71,6 +72,8 @@ urlpatterns = [
     path("admin/manual-requests/", admin_list_manual_requests),
     path("admin/manual-requests/<int:pk>/approve/", admin_approve_manual_request),
     path("admin/manual-requests/<int:pk>/reject/", admin_reject_manual_request),
+    # Add this new line:
+    path('admin/manual-requests/<int:pk>/delete/', views.admin_delete_manual_request),
 
     # Plans
     path("plans/", get_plans),

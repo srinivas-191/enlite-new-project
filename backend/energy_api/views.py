@@ -724,6 +724,23 @@ def admin_reject_manual_request(request, pk):
         "request_id": req.id,
     })
 
+# --- NEW ADMIN DELETE ENDPOINT ---
+@api_view(["DELETE"])
+@permission_classes([IsAuthenticated])
+def admin_delete_manual_request(request, pk):
+    """Permanently deletes a manual payment request by primary key (pk)."""
+    if not request.user.is_staff:
+        return Response({"error": "Access denied"}, status=403)
+
+    try:
+        # Hard delete (removes record permanently)
+        req = ManualPaymentRequest.objects.get(pk=pk)
+        req.delete()
+        return Response({"message": f"Manual payment request {pk} permanently deleted."})
+    except ManualPaymentRequest.DoesNotExist:
+        return Response({"error": "Request not found"}, status=404)
+# --- END NEW ADMIN DELETE ENDPOINT ---
+
 # Plans listing
 @api_view(["GET"])
 def get_plans(request):
