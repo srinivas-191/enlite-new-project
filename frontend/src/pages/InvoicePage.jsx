@@ -1,8 +1,20 @@
 // src/pages/InvoicePage.jsx
 import React, { useMemo, useState } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
-import { motion } from "framer-motion"; // Import Framer Motion
-import { QrCode, Clipboard, ArrowLeft, Send, CheckSquare, DollarSign, Edit3, UserCheck, CheckCircle, Clock } from "lucide-react"; // Import Icons
+import { motion } from "framer-motion";
+import {
+  QrCode,
+  Clipboard,
+  ArrowLeft,
+  Send,
+  CheckSquare,
+  DollarSign,
+  UserCheck,
+  CheckCircle,
+  Clock,
+} from "lucide-react";
+
+import { apiPost } from "../lib/api"; // ✅ IMPORTANT: Use global API instance
 
 const PLAN_MAP = {
   Basic: { price: 75, label: "Basic", qr: "/assets/qr1.jpg" },
@@ -13,7 +25,7 @@ const PLAN_MAP = {
 const UPI_ID = "9390248043@ptyes";
 const UPI_NAME = "Chidhurala Chandrakiran";
 
-// Framer Motion variant for the main container
+// Animation
 const containerVariants = {
   hidden: { opacity: 0, y: 30 },
   visible: { opacity: 1, y: 0, transition: { duration: 0.6 } },
@@ -36,13 +48,14 @@ export default function InvoicePage() {
   const qrSrc = plan.qr;
 
   const upiLink = useMemo(() => {
-    return `upi://pay?pa=${encodeURIComponent(UPI_ID)}&pn=${encodeURIComponent(
-      UPI_NAME
-    )}&am=${plan.price}&cu=INR&tn=${encodeURIComponent(
+    return `upi://pay?pa=${encodeURIComponent(
+      UPI_ID
+    )}&pn=${encodeURIComponent(UPI_NAME)}&am=${plan.price}&cu=INR&tn=${encodeURIComponent(
       `${plan.label} plan payment`
     )}`;
   }, [plan]);
 
+  // ⭐ FIXED: Now uses apiPost() which automatically uses correct baseURL
   const handleSubmit = async () => {
     if (!bankName || !txnId) {
       setMessage("Please fill the Banking Name and Transaction ID fields.");
@@ -65,43 +78,37 @@ export default function InvoicePage() {
       if (notes) form.append("notes", notes);
       form.append("screenshot", screenshot);
 
-      const token = localStorage.getItem("token");
+      // API CALL TO RAILWAY BACKEND
+      await apiPost("/manual-payment-request/", form);
 
-      const resp = await fetch("http://localhost:8000/api/manual-payment-request/", {
-        method: "POST",
-        headers: token ? { Authorization: `Token ${token}` } : {},
-        body: form,
-      });
+      setMessage("✅ Success! Your payment request has been submitted.");
 
-      if (!resp.ok) {
-        const err = await resp.json().catch(() => ({}));
-        throw new Error(err.error || "Failed to submit payment request.");
-      }
-
-      setMessage("✅ Success! Your request has been submitted. Admin will verify soon.");
-
-      // Clear fields upon successful submission
+      // Reset fields
       setBankName("");
       setTxnId("");
       setNotes("");
       setScreenshot(null);
-
     } catch (err) {
-      setMessage(`❌ Submission failed: ${err.message}`);
+      console.error(err);
+      setMessage(
+        `❌ Submission failed: ${
+          err?.response?.data?.error || err?.message || "Unknown error"
+        }`
+      );
     } finally {
       setSubmitting(false);
-      setTimeout(() => setMessage(""), 5000); // Clear message after 5 seconds
+      setTimeout(() => setMessage(""), 5000);
     }
   };
 
   const handleCopyToClipboard = () => {
     navigator.clipboard.writeText(upiLink);
-    setMessage("🔗 UPI link copied to clipboard!");
+    setMessage("🔗 UPI link copied!");
     setTimeout(() => setMessage(""), 3000);
   };
 
   return (
-    <motion.div 
+    <motion.div
       className="max-w-6xl mx-auto mt-24 p-8 bg-gray-50 rounded-2xl shadow-3xl min-h-[80vh]"
       variants={containerVariants}
       initial="hidden"
@@ -109,167 +116,135 @@ export default function InvoicePage() {
     >
       {/* Header */}
       <h1 className="text-4xl font-extrabold mb-8 text-gray-800 border-b pb-3 flex items-center gap-3">
-        <DollarSign size={32} className="text-blue-600"/>
+        <DollarSign size={32} className="text-blue-600" />
         Manual Payment: <span className="text-blue-700">{plan.label} Plan</span>
       </h1>
-      
+
       <div className="text-2xl font-semibold mb-6 p-4 rounded-lg bg-blue-100 text-blue-800 flex justify-between items-center shadow-inner">
         <span>Amount:</span>
         <span className="text-4xl font-black">₹{plan.price}</span>
       </div>
 
       <div className="grid md:grid-cols-2 gap-8">
-
-        {/* LEFT SIDE: PAYMENT DETAILS CARD */}
-        <motion.div 
+        {/* LEFT SIDE */}
+        <motion.div
           className="border border-blue-200 rounded-xl p-6 bg-white shadow-xl flex flex-col items-center"
           whileHover={{ translateY: -5 }}
-          transition={{ type: "spring", stiffness: 300 }}
         >
           <h3 className="text-2xl font-bold mb-4 text-blue-700 flex items-center gap-2">
-            <QrCode size={24}/> Pay via UPI
+            <QrCode size={24} /> Pay via UPI
           </h3>
-          <p className="text-sm text-gray-500 mb-4">Scan the QR code or use the link below to pay the exact amount.</p>
-          
           <img
             src={qrSrc}
-            alt="UPI QR Code for Payment"
-            className="w-full max-w-[280px] h-auto object-contain rounded-lg border-4 border-gray-100 shadow-lg mb-6"
+            alt="UPI QR Code"
+            className="w-full max-w-[280px] rounded-lg border-4 border-gray-100 shadow-lg mb-6"
           />
 
-          <div className="text-center font-bold text-lg mb-4 text-gray-700">
-            Payee: {UPI_NAME}
-          </div>
+          <motion.button
+            onClick={handleCopyToClipboard}
+            className="px-5 py-3 border border-blue-500 bg-blue-50 text-blue-700 rounded-lg mb-4"
+            whileHover={{ scale: 1.05 }}
+          >
+            <Clipboard size={18} /> Copy UPI Link
+          </motion.button>
 
-          <div className="flex gap-4 justify-center flex-wrap mb-6">
-            <motion.button
-              onClick={handleCopyToClipboard}
-              className="px-5 py-3 border border-blue-500 bg-blue-50 text-blue-700 rounded-lg text-sm font-semibold hover:bg-blue-100 transition duration-300 flex items-center gap-2"
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-            >
-              <Clipboard size={18} /> Copy UPI Link
-            </motion.button>
-            <motion.a
-                href={upiLink}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="px-5 py-3 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 transition duration-300 flex items-center gap-2"
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-            >
-                Open UPI App
-            </motion.a>
-          </div>
-
-          <div className="text-sm text-gray-700 leading-relaxed p-4 bg-gray-100 rounded-lg w-full">
-            <strong className="text-gray-800 flex items-center gap-1 mb-1"><CheckSquare size={16}/> Payment Instructions:</strong>
-            <ol className="list-decimal ml-5 mt-1 space-y-1">
-              <li>Pay **exact ₹{plan.price}** to the UPI ID or QR.</li>
-              <li>**Save the transaction screenshot** immediately after successful payment.</li>
-              <li>Fill out the form on the right and submit details for Admin verification.</li>
-            </ol>
-          </div>
+          <motion.a
+            href={upiLink}
+            target="_blank"
+            className="px-5 py-3 bg-blue-600 text-white rounded-lg font-semibold shadow-md"
+            whileHover={{ scale: 1.05 }}
+          >
+            Open UPI App
+          </motion.a>
         </motion.div>
 
-        {/* RIGHT SIDE: VERIFICATION FORM CARD */}
-        <motion.div 
+        {/* RIGHT SIDE */}
+        <motion.div
           className="border border-green-200 rounded-xl p-6 bg-white shadow-xl"
           whileHover={{ translateY: -5 }}
-          transition={{ type: "spring", stiffness: 300, delay: 0.1 }}
         >
           <h3 className="text-2xl font-bold mb-6 text-green-700 flex items-center gap-2 border-b pb-2">
-            <UserCheck size={24}/> Verification Form
+            <UserCheck size={24} /> Verification Form
           </h3>
 
           {/* Form Fields */}
           <div className="space-y-4">
-            {/* Banking Name */}
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1">Banking Name (Used for Payment) *</label>
+              <label className="block text-sm font-semibold">Banking Name *</label>
               <input
                 value={bankName}
                 onChange={(e) => setBankName(e.target.value)}
-                className="w-full border border-gray-300 px-4 py-2 rounded-lg focus:ring-blue-500 focus:border-blue-500 transition duration-200"
-                placeholder="E.g., John Doe"
+                className="w-full border px-4 py-2 rounded-lg"
+                placeholder="John Doe"
               />
             </div>
 
-            {/* Transaction ID */}
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1">Transaction ID (UPI/Reference No.) *</label>
+              <label className="block text-sm font-semibold">Transaction ID *</label>
               <input
                 value={txnId}
                 onChange={(e) => setTxnId(e.target.value)}
-                className="w-full border border-gray-300 px-4 py-2 rounded-lg focus:ring-blue-500 focus:border-blue-500 transition duration-200"
-                placeholder="E.g., 512345678901"
+                className="w-full border px-4 py-2 rounded-lg"
+                placeholder="UPI Ref No."
               />
             </div>
-            
-            {/* Screenshot */}
+
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1">Upload Screenshot *</label>
-              <div className="flex items-center space-x-3">
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => setScreenshot(e.target.files[0])}
-                  className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-                />
-              </div>
-              {screenshot && <p className="text-xs mt-2 text-green-600 flex items-center gap-1"><CheckCircle size={14}/> File ready: {screenshot.name}</p>}
+              <label className="block text-sm font-semibold">Upload Screenshot *</label>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => setScreenshot(e.target.files[0])}
+                className="w-full text-sm"
+              />
+              {screenshot && (
+                <p className="text-xs text-green-600 mt-2">
+                  <CheckCircle size={14} /> {screenshot.name}
+                </p>
+              )}
             </div>
 
-            {/* Notes */}
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1">Notes (Optional)</label>
+              <label className="block text-sm font-semibold">Notes (Optional)</label>
               <textarea
-                rows={10}
+                rows={4}
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                className="w-full px-4 py-2 rounded-lg border border-gray-300 resize-none focus:ring-blue-500 focus:border-blue-500 transition duration-200"
-                placeholder="Any message for the admin..."
-              ></textarea>
+                className="w-full border px-4 py-2 rounded-lg"
+              />
             </div>
           </div>
 
-
-          {/* Submission and Status */}
-          <div className="mt-8 pt-4 border-t flex flex-col space-y-4">
+          {/* Submit */}
+          <div className="mt-8 pt-4 border-t">
             <motion.button
               onClick={handleSubmit}
               disabled={submitting}
-              className={`w-full py-3 rounded-lg text-white font-bold text-lg transition duration-300 flex items-center justify-center gap-2 shadow-md ${
+              className={`w-full py-3 rounded-lg text-white font-bold text-lg flex justify-center gap-2 ${
                 submitting
-                  ? "bg-gray-400 cursor-not-allowed"
-                  : "bg-green-600 hover:bg-green-700"
+                  ? "bg-gray-400"
+                  : "bg-green-600 hover:bg-green-700 cursor-pointer"
               }`}
-              whileHover={!submitting ? { scale: 1.02 } : {}}
-              whileTap={!submitting ? { scale: 0.98 } : {}}
             >
-              {submitting ? (
-                <>
-                  <Clock size={20} className="animate-spin" /> Submitting...
-                </>
-              ) : (
-                <>
-                  <Send size={20} /> Submit for Verification
-                </>
-              )}
+              {submitting ? <Clock className="animate-spin" /> : <Send />}
+              {submitting ? "Submitting..." : "Submit for Verification"}
             </motion.button>
-            
+
             <button
               onClick={() => navigate("/pricing")}
-              className="w-full py-3 border border-gray-300 rounded-lg text-gray-700 font-semibold hover:bg-gray-100 transition duration-300 flex items-center justify-center gap-2"
+              className="w-full py-3 mt-4 border rounded-lg"
             >
               <ArrowLeft size={18} /> Back to Pricing
             </button>
 
-            {/* Message Area */}
             {message && (
-              <p className={`mt-4 text-sm font-semibold p-3 rounded-lg ${
-                message.startsWith('✅') ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-              }`}>
+              <p
+                className={`mt-4 text-sm font-semibold p-3 rounded-lg ${
+                  message.startsWith("✅")
+                    ? "bg-green-100 text-green-700"
+                    : "bg-red-100 text-red-700"
+                }`}
+              >
                 {message}
               </p>
             )}

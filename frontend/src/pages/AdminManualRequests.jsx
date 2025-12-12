@@ -27,7 +27,7 @@ export default function AdminManualRequests() {
  const [requests, setRequests] = useState([]);
 
  // FIXED: always correct backend root
- const API_ROOT = "http://127.0.0.1:8000";
+ const API_ROOT = "https://beneficial-quietude-production.up.railway.app/api";
 
  useEffect(() => {
   loadRequests();
