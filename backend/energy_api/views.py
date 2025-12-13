@@ -700,14 +700,28 @@ def admin_list_users(request):
     if not request.user.is_staff:
         return Response({"error": "Access denied"}, status=403)
 
-    users = User.objects.annotate(prediction_count=Count("predictionhistory")).order_by("-date_joined")
+    users = User.objects.annotate(
+        prediction_count=Count("predictionhistory")
+    ).order_by("-date_joined")
 
-    data = [{
-        "username": u.username,
-        "joined_on": u.date_joined,
-        "is_admin": u.is_staff,
-        "prediction_count": u.prediction_count,
-    } for u in users]
+    data = []
+    for u in users:
+        try:
+            sub = Subscription.objects.get(user=u)
+            plan = sub.plan.upper()
+            active = sub.active
+        except Subscription.DoesNotExist:
+            plan = "FREE"
+            active = False
+
+        data.append({
+            "username": u.username,
+            "joined_on": u.date_joined,
+            "is_admin": u.is_staff,
+            "prediction_count": u.prediction_count,
+            "plan": plan,
+            "active": active,
+        })
 
     return Response({"users": data})
 
