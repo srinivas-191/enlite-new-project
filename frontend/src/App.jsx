@@ -6,8 +6,8 @@ import "./app.css";
 import ScrollToTop from "./components/ScrollToTop";
 import PrivateRoute from "./components/PrivateRoute";
 import PricingPage from "./pages/PricingPage";
-import InvoicePage from "./pages/InvoicePage";
-import AdminManualRequests from "./pages/AdminManualRequests";
+//import InvoicePage from "./pages/InvoicePage";
+//import AdminManualRequests from "./pages/AdminManualRequests";
 // Lazy imports
 
 const HomePage = React.lazy(() => import("./pages/HomePage"));
@@ -21,7 +21,9 @@ const HistoryPage = React.lazy(() => import("./pages/HistoryPage"));
 const ProfilePage = React.lazy(() => import("./pages/ProfilePage"));
 const AdminDashboard = React.lazy(() => import("./pages/AdminDashboard"));
 const AdminUserHistory = React.lazy(() => import("./pages/AdminUserHistory"));
-
+const ForgotPasswordPage = React.lazy(() => import("./pages/ForgotPasswordPage"));
+const ResetPasswordPage = React.lazy(() => import("./pages/ResetPasswordPage"));
+const OtpVerifyPage = React.lazy(() => import("./pages/OtpVerifyPage"));
 const App = () => {
   return (
     <div className="min-h-screen bg-[#FCF5EE]  text-gray-900">
@@ -43,17 +45,30 @@ const App = () => {
           <Route path="/solutions" element={<Solutions />} />
           <Route path="/contact" element={<ContactPage />} />
           <Route path="/pricing" element={<PricingPage />} />
-          <Route path="/invoice" element={<InvoicePage />} />
+          
           {/* Auth Pages */}
+          
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
+
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/forgot-password/verify" element={<OtpVerifyPage />} />
+          <Route path="/forgot-password/reset" element={<ResetPasswordPage />} />
+
           <Route path="/predict" element={<PrivateRoute><PredictPage /></PrivateRoute>} />
           <Route path="/profile" element={<PrivateRoute><ProfilePage /></PrivateRoute>} />
           <Route path="/history" element={<PrivateRoute><HistoryPage /></PrivateRoute>} />
 
           <Route path="/admin-dashboard" element={<PrivateRoute><AdminDashboard /></PrivateRoute>} />
-          <Route path="/admin/user/:username" element={<PrivateRoute><AdminUserHistory /></PrivateRoute>} />
-          <Route path="/admin/manual-requests" element={<AdminManualRequests />} />
+          <Route
+  path="/admin/user-history/:username"
+  element={
+    <PrivateRoute>
+      <AdminUserHistory />
+    </PrivateRoute>
+  }
+/>
+          
 
 
           <Route path="*" element={<Navigate to="/" replace />} />

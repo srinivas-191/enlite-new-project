@@ -851,6 +851,55 @@ export default function PredictPage() {
                 )}
               </ul>
             </div>
+            {/* ===================== OPTIMIZED PERFORMANCE (PDF SECTION) ===================== */}
+{result.optimized_energy_month_kwh !== null && (
+  <div className="mt-6" style={{ fontSize: "11pt" }}>
+    <h3 className="font-semibold mb-2 text-gray-800" style={{ fontSize: "12pt" }}>
+      Expected Performance After Improvements
+    </h3>
+
+    <table className="w-full border-collapse text-xs" style={{ fontSize: "10pt" }}>
+      <tbody>
+        <tr>
+          <td style={{ border: "1px solid #e5e7eb", padding: "6px" }}>
+            Optimized Monthly Energy
+          </td>
+          <td style={{ border: "1px solid #e5e7eb", padding: "6px" }}>
+            {result.optimized_energy_month_kwh} kWh
+          </td>
+        </tr>
+
+        <tr>
+          <td style={{ border: "1px solid #e5e7eb", padding: "6px" }}>
+            Energy Savings
+          </td>
+          <td style={{ border: "1px solid #e5e7eb", padding: "6px" }}>
+            {result.energy_savings_kwh} kWh ({result.energy_savings_percent}%)
+          </td>
+        </tr>
+
+        <tr>
+          <td style={{ border: "1px solid #e5e7eb", padding: "6px" }}>
+            Optimized EUI
+          </td>
+          <td style={{ border: "1px solid #e5e7eb", padding: "6px" }}>
+            {result.optimized_eui_kwh_m2} kWh/m²
+          </td>
+        </tr>
+
+        <tr>
+          <td style={{ border: "1px solid #e5e7eb", padding: "6px" }}>
+            Expected Category
+          </td>
+          <td style={{ border: "1px solid #e5e7eb", padding: "6px" }}>
+            {result.optimized_category}
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+)}
+
           </div>
         )}
 
@@ -1210,7 +1259,7 @@ export default function PredictPage() {
                     {result.impacting_factors?.length ? (
                       result.impacting_factors.map((f, i) => (
                         <div key={`imp-${i}`} className="flex items-center gap-2 p-2 border rounded hover:shadow-lg transition cursor-pointer">
-                          <span className={`w-3 h-3 rounded-full ${f.toLowerCase().includes("high") ? "bg-red-500" : f.toLowerCase().includes("medium") ? "bg-yellow-400" : "bg-green-500"}`} />
+                          <span className={`w-3 h-3 rounded-full ${f.toLowerCase().includes("high") ? "bg-red-500" : f.toLowerCase().includes("medium") ? "bg-red-400" : "bg-red-500"}`} />
                           <span>{f}</span>
                         </div>
                       ))
@@ -1235,6 +1284,22 @@ export default function PredictPage() {
                     )}
                   </div>
                 </div>
+                {/* ===================== OPTIMIZED PERFORMANCE SECTION ===================== */}
+{result.optimized_energy_month_kwh !== null && (
+  <div className="mt-8 p-4 border rounded-lg bg-green-50 shadow">
+    <h3 className="text-lg font-semibold text-green-800 mb-3">
+      Expected Performance After Improvements
+    </h3>
+
+    <div className="space-y-2 text-sm">
+      <p><strong>Optimized Monthly Energy:</strong> {result.optimized_energy_month_kwh} kWh</p>
+      <p><strong>Energy Savings:</strong> {result.energy_savings_kwh} kWh ({result.energy_savings_percent}%)</p>
+      <p><strong>Optimized EUI:</strong> {result.optimized_eui_kwh_m2} kWh/m²</p>
+      <p><strong>Expected Category:</strong> {result.optimized_category}</p>
+    </div>
+  </div>
+)}
+
 
                 <div className="mt-6 flex flex-wrap gap-3">
                   <button onClick={handleDownload} className="px-4 py-2 border rounded bg-blue-600 text-white hover:bg-blue-700 transition flex items-center gap-1">⬇️ Download Report (PDF)</button>

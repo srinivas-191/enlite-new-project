@@ -1,10 +1,16 @@
 // src/components/PrivateRoute.jsx
 import React from "react";
-import { Navigate } from "react-router-dom";
+import { Navigate, useLocation } from "react-router-dom";
 
-const PrivateRoute = ({ children }) => {
+export default function PrivateRoute({ children }) {
   const token = localStorage.getItem("token");
-  return token ? children : <Navigate to="/login" replace />;
-};
+  const location = useLocation();
 
-export default PrivateRoute;
+  if (!token) {
+    // Save the attempted URL so we can redirect back after login
+    localStorage.setItem("postLoginRedirect", location.pathname);
+    return <Navigate to="/login" replace />;
+  }
+
+  return children;
+}

@@ -1,10 +1,16 @@
 # energy_api/views.py
 import os
 import traceback
+import random
 from django.conf import settings
 from django.shortcuts import get_object_or_404
 from django.contrib.auth import authenticate, get_user_model
 from django.db.models import Count
+from django.core.mail import send_mail
+from django.utils import timezone
+import razorpay
+import hmac
+import hashlib
 
 from rest_framework.decorators import api_view, permission_classes, parser_classes
 from rest_framework.permissions import IsAuthenticated
@@ -15,12 +21,12 @@ from rest_framework import status
 
 import joblib
 import pandas as pd
-from django.utils import timezone
 
 from .models import (
     PredictionHistory,
-    ManualPaymentRequest,
+    
     Subscription,
+    PasswordResetOTP,
 )
 
 User = get_user_model()
@@ -51,33 +57,31 @@ FEATURE_RANGES = {
 }
 
 DEFAULT_VALUES = {
-    "Floor_Insulation": 0.88,
-    "Door_Insulation": 3.25,
-    "Roof_Insulation": 1.17,
-    "Window_Insulation": 3.24,
-    "Wall_Insulation": 1.25,
-    "Hvac_Efficiency": 3.25,
-    "Domestic_Hot_Water_Usage": 2,
-    "Lighting_Density": 5,
-    "Occupancy_Level": 3,
-    "Equipment_Density": 11,
-    "Window_To_Wall_Ratio": 35,
-    "Total_Building_Area": 85.91,
+    "Floor_Insulation": 0.20,
+            "Door_Insulation": 1.00,
+            "Roof_Insulation": 0.15,
+            "Window_Insulation": 1.20,
+            "Wall_Insulation": 0.25,
+            "Hvac_Efficiency": 3.5,
+            "Domestic_Hot_Water_Usage": 1.50,
+            "Lighting_Density": 3,
+            "Occupancy_Level": 3,
+            "Equipment_Density": 8,
+            "Window_To_Wall_Ratio": 30,
+            "Total_Building_Area": 85.91
 }
 
 # -------------------------
 # Helpers: load model & metadata
 # -------------------------
 def load_all():
+    """Loads model, label encoder and scaler once and caches them."""
     if _loaded["model"] is None:
         _loaded["model"] = joblib.load(MODEL_PATH)
-
     if _loaded["le"] is None:
         _loaded["le"] = joblib.load(LE_PATH)
-
     if _loaded["sc"] is None:
         _loaded["sc"] = joblib.load(SC_PATH)
-
     if _loaded["features"] is None:
         sc = _loaded["sc"]
         if hasattr(sc, "feature_names_in_"):
@@ -98,12 +102,11 @@ def load_all():
                 "Window_To_Wall_Ratio",
                 "Total_Building_Area",
             ]
-
     return _loaded["model"], _loaded["le"], _loaded["sc"], _loaded["features"]
 
 
 # -------------------------
-# Category & recommendations
+# EUI Category (Option A — Script scale)
 # -------------------------
 def monthly_category(eui):
     if eui is None:
@@ -119,10 +122,14 @@ def monthly_category(eui):
     return "Very Poor (Inefficient)"
 
 
+# -------------------------
+# Recommendation generator
+# -------------------------
 def get_recommendations(user_vals):
-    recommendations = []
     issues = []
+    recommendations = []
 
+    # Optimal reference values (your standard)
     optimal = {
         "Floor_Insulation": 0.20,
         "Door_Insulation": 1.00,
@@ -137,45 +144,138 @@ def get_recommendations(user_vals):
         "Window_To_Wall_Ratio": 30
     }
 
+    # Material suggestions for insulation
+    insulation_materials = {
+        "Floor_Insulation": "rigid PIR/XPS boards, mineral wool, or spray foam",
+        "Door_Insulation": "thermally insulated doors with good sealing",
+        "Roof_Insulation": "PIR boards, rockwool, cellulose, or spray foam",
+        "Window_Insulation": "double-glazed low-E glass with argon filling",
+        "Wall_Insulation": "mineral wool, EPS/XPS boards, or external insulated cladding"
+    }
+
     for feature, opt in optimal.items():
         try:
             val = float(user_vals.get(feature, 0))
         except Exception:
             val = 0.0
 
+        # ------------------- INSULATION (Detailed) -------------------
         if feature in [
             "Floor_Insulation", "Door_Insulation", "Roof_Insulation",
             "Window_Insulation", "Wall_Insulation"
         ]:
             if val > opt * 1.5:
-                issues.append(f"{feature.replace('_', ' ')} is too high.")
-                recommendations.append(f"Reduce {feature.replace('_',' ')} closer to {opt}.")
+                issues.append(f"{feature.replace('_', ' ')} is too high (poor insulation).")
+                recommendations.append(
+                    f"Improve the {feature.replace('_',' ').lower()} (target: {opt}). "
+                    f"Use: {insulation_materials[feature]}."
+                )
 
-        elif feature == "Hvac_Efficiency" and val < opt:
-            issues.append("Low HVAC efficiency.")
-            recommendations.append("Upgrade HVAC system to ≥ 3.5 COP.")
+        # ------------------- HVAC -------------------
+        elif feature == "Hvac_Efficiency":
+            if val < opt:
+                issues.append("Low HVAC efficiency.")
+                recommendations.append(
+                    f"Upgrade HVAC to COP {opt} or higher for improved performance."
+                )
 
-        elif feature == "Domestic_Hot_Water_Usage" and val > opt * 1.3:
-            issues.append("High domestic hot water usage.")
-            recommendations.append("Install low-flow fixtures.")
+        # ------------------- Hot Water -------------------
+        elif feature == "Domestic_Hot_Water_Usage":
+            if val > opt * 1.3:
+                issues.append("High domestic hot water usage.")
+                recommendations.append(
+                    f"Use low-flow taps/showers or install a solar water heater (recommended target: {opt})."
+                )
 
-        elif feature == "Lighting_Density" and val > opt * 1.4:
-            issues.append("High lighting density.")
-            recommendations.append("Use LED lighting.")
+        # ------------------- Lighting -------------------
+        elif feature == "Lighting_Density":
+            if val > opt * 1.4:
+                issues.append("Lighting density is high.")
+                recommendations.append(
+                    f"Switch to LED lights or reduce lighting levels (target: {opt} W/m²)."
+                )
 
-        elif feature == "Equipment_Density" and val > opt * 1.4:
-            issues.append("High equipment density.")
-            recommendations.append("Use efficient appliances.")
+        # ------------------- Occupancy -------------------
+        elif feature == "Occupancy_Level":
+            if val > opt * 1.5:
+                issues.append("High occupancy load.")
+                recommendations.append(
+                    f"Avoid overcrowding and spread activities throughout the day (ideal level: {opt})."
+                )
 
-        elif feature == "Occupancy_Level" and val > opt * 1.5:
-            issues.append("High occupancy load.")
-            recommendations.append("Reduce peak loads.")
+        # ------------------- Equipment -------------------
+        elif feature == "Equipment_Density":
+            if val > opt * 1.4:
+                issues.append("High equipment density.")
+                recommendations.append(
+                    f"Use energy-efficient appliances (recommended load: {opt} W/m²)."
+                )
 
-        elif feature == "Window_To_Wall_Ratio" and val > 50:
-            issues.append("High window-to-wall ratio.")
-            recommendations.append("Use shading devices.")
+        # ------------------- WWR -------------------
+        elif feature == "Window_To_Wall_Ratio":
+            if val > 50:
+                issues.append("High window-to-wall ratio.")
+                recommendations.append(
+                    f"Use external shading or better glazing to reduce heat gain (target: {opt}%)."
+                )
 
     return issues, recommendations
+
+
+# -------------------------
+# Optimized performance calculator
+# -------------------------
+def compute_optimized_performance(user_vals, model, sc):
+    optimal_targets = {
+        "Floor_Insulation": 0.20,
+        "Door_Insulation": 1.00,
+        "Roof_Insulation": 0.15,
+        "Window_Insulation": 1.20,
+        "Wall_Insulation": 0.25,
+        "Hvac_Efficiency": 3.5,
+        "Domestic_Hot_Water_Usage": 1.50,
+        "Lighting_Density": 3,
+        "Occupancy_Level": 3,
+        "Equipment_Density": 8,
+        "Window_To_Wall_Ratio": 30
+    }
+
+    optimized_vals = user_vals.copy()
+
+    # Apply optimal values
+    for feature, val in optimal_targets.items():
+        optimized_vals[feature] = val
+
+    # ❗ Remove helper keys NOT used during model training
+    optimized_vals = {k: v for k, v in optimized_vals.items() if not k.startswith("__")}
+
+    # Convert to DataFrame
+    df_opt = pd.DataFrame([optimized_vals])
+
+    # Scale + Predict
+    scaled_opt = sc.transform(df_opt)
+    yearly_opt = float(model.predict(scaled_opt)[0])
+    monthly_opt = yearly_opt / 12.0
+
+    area = float(user_vals.get("Total_Building_Area") or 0)
+    optimized_eui = monthly_opt / area if area else None
+
+    current_monthly = user_vals.get("__current_monthly_energy__", None)
+
+    if current_monthly:
+        saved_kwh = current_monthly - monthly_opt
+        saved_percent = (saved_kwh / current_monthly) * 100 if current_monthly > 0 else 0
+    else:
+        saved_kwh = None
+        saved_percent = None
+
+    return {
+        "optimized_energy_month_kwh": round(monthly_opt, 2),
+        "energy_savings_kwh": round(saved_kwh, 2) if saved_kwh is not None else None,
+        "energy_savings_percent": round(saved_percent, 2) if saved_percent is not None else None,
+        "optimized_eui_kwh_m2": round(optimized_eui, 2) if optimized_eui else None,
+        "optimized_category": monthly_category(optimized_eui)
+    }
 
 
 # -------------------------
@@ -185,26 +285,35 @@ def get_recommendations(user_vals):
 def register_user(request):
     username = request.data.get("username")
     password = request.data.get("password")
+    email = request.data.get("email")
 
-    if not username or not password:
-        return Response({"error": "username and password required"}, status=400)
+    if not username or not password or not email:
+        return Response({"error": "username, email and password required"}, status=400)
 
     if User.objects.filter(username=username).exists():
         return Response({"error": "User already exists"}, status=400)
 
-    user = User.objects.create_user(username=username, password=password)
+    if User.objects.filter(email=email).exists():
+        return Response({"error": "Email already exists"}, status=400)
+
+    user = User.objects.create_user(username=username, password=password, email=email)
     token, _ = Token.objects.get_or_create(user=user)
 
-    # create default Subscription if not present
     Subscription.objects.get_or_create(
         user=user,
-        defaults={
-            "plan": "free",
-            "allowed_predictions": 10,
-            "remaining_predictions": 10,
-            "active": False,
-        },
+        defaults={"plan": "free", "allowed_predictions": 10, "remaining_predictions": 10, "active": False},
     )
+
+    try:
+        send_mail(
+            subject="Welcome — Your account has been created",
+            message=f"Hello {username}, your account has been created.",
+            from_email=getattr(settings, "DEFAULT_FROM_EMAIL", None),
+            recipient_list=[email],
+            fail_silently=False,
+        )
+    except:
+        pass
 
     return Response({
         "message": "User registered successfully",
@@ -228,15 +337,9 @@ def login_user(request):
 
     token, _ = Token.objects.get_or_create(user=user)
 
-    # ensure subscription exists
     Subscription.objects.get_or_create(
         user=user,
-        defaults={
-            "plan": "free",
-            "allowed_predictions": 10,
-            "remaining_predictions": 10,
-            "active": False,
-        },
+        defaults={"plan": "free", "allowed_predictions": 10, "remaining_predictions": 10, "active": False},
     )
 
     return Response({
@@ -248,15 +351,87 @@ def login_user(request):
 
 
 # -------------------------
+# FORGOT PASSWORD (OTP Flow)
+# -------------------------
+@api_view(["POST"])
+def forgot_password_request(request):
+    email = request.data.get("email")
+    if not email:
+        return Response({"error": "Email required"}, status=400)
+
+    user = User.objects.filter(email=email).first()
+    if not user:
+        return Response({"error": "Email not found"}, status=404)
+
+    otp = str(random.randint(100000, 999999))
+    PasswordResetOTP.objects.create(user=user, otp=otp)
+
+    try:
+        send_mail(
+            subject="Your Password Reset OTP",
+            message=f"Your OTP is: {otp}",
+            from_email=getattr(settings, "DEFAULT_FROM_EMAIL", None),
+            recipient_list=[email],
+        )
+    except:
+        return Response({"error": "Failed to send OTP"}, status=500)
+
+    return Response({"message": "OTP sent"})
+
+
+@api_view(["POST"])
+def verify_otp(request):
+    email = request.data.get("email")
+    otp = request.data.get("otp")
+
+    if not email or not otp:
+        return Response({"error": "email and otp required"}, status=400)
+
+    user = User.objects.filter(email=email).first()
+    if not user:
+        return Response({"error": "Invalid email"}, status=404)
+
+    record = PasswordResetOTP.objects.filter(user=user, otp=otp).order_by("-created_at").first()
+    if not record or record.is_expired():
+        return Response({"error": "Invalid or expired OTP"}, status=400)
+
+    return Response({"message": "OTP verified"})
+
+
+@api_view(["POST"])
+def reset_password(request):
+    email = request.data.get("email")
+    otp = request.data.get("otp")
+    new_password = request.data.get("new_password")
+
+    if not email or not otp or not new_password:
+        return Response({"error": "email, otp and new_password required"}, status=400)
+
+    user = User.objects.filter(email=email).first()
+    if not user:
+        return Response({"error": "Invalid email"}, status=404)
+
+    record = PasswordResetOTP.objects.filter(user=user, otp=otp).order_by("-created_at").first()
+    if not record or record.is_expired():
+        return Response({"error": "Invalid or expired OTP"}, status=400)
+
+    user.set_password(new_password)
+    user.save()
+
+    PasswordResetOTP.objects.filter(user=user).delete()
+
+    return Response({"message": "Password reset successful"})
+
+
+# -------------------------
 # BASIC: building types / defaults
 # -------------------------
 @api_view(["GET"])
 def get_building_types(request):
     _, le, _, _ = load_all()
-    # Le might be a label-encoder with classes_
     try:
         classes = [bt.title() for bt in le.classes_]
-    except Exception:
+    except:
         classes = []
     return Response({"building_types": classes})
 
@@ -272,35 +447,21 @@ def get_defaults(request):
 
 
 # -------------------------
-# PREDICT: uses Subscription to deduct remaining predictions
+# PREDICT WITH RECOMMENDATIONS + OPTIMIZED PERFORMANCE
 # -------------------------
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def predict_energy(request):
     user = request.user
 
-    # ensure subscription exists
     sub, _ = Subscription.objects.get_or_create(
         user=user,
-        defaults={
-            "plan": "free",
-            "allowed_predictions": 10,
-            "remaining_predictions": 10,
-            "active": False,
-        }
+        defaults={"plan": "free", "allowed_predictions": 10, "remaining_predictions": 10, "active": False},
     )
 
-    # check remaining predictions
-    if sub.remaining_predictions is None:
-        # Defensive: if None, treat as unlimited only for admins
-        if not user.is_staff:
-            return Response({"error": "LIMIT_UNSPECIFIED"}, status=403)
-    elif sub.remaining_predictions <= 0:
-        if not sub.active:
-            return Response({"error": "TRIAL_EXPIRED", "message": "Your free trial has ended. Please upgrade."}, status=403)
-        return Response({"error": "LIMIT_REACHED", "message": "Your plan limit is over."}, status=403)
+    if sub.remaining_predictions is not None and sub.remaining_predictions <= 0:
+        return Response({"error": "TRIAL_EXPIRED"}, status=403)
 
-    # load model
     try:
         model, le, sc, features = load_all()
     except Exception as e:
@@ -316,13 +477,11 @@ def predict_energy(request):
                 if not val:
                     return Response({"error": "Missing Building_Type"}, status=400)
                 try:
-                    # label encoder may expect lowercase; handle gracefully
                     encoded = int(le.transform([val.lower()])[0])
-                except Exception:
-                    # try without lower
+                except:
                     try:
                         encoded = int(le.transform([val])[0])
-                    except Exception:
+                    except:
                         return Response({"error": f"Invalid Building_Type: {val}"}, status=400)
                 row.append(encoded)
             else:
@@ -339,8 +498,16 @@ def predict_energy(request):
         eui = monthly / area if area else None
 
         user_vals = df.iloc[0].to_dict()
+        user_vals["__current_monthly_energy__"] = monthly
+
         issues, recs = get_recommendations(user_vals)
         impacting = issues if issues else ["No major issues detected."]
+
+        already_optimized = is_already_optimized(user_vals)
+
+        optimized = None
+        if not already_optimized:
+            optimized = compute_optimized_performance(user_vals, model, sc)
 
         record = PredictionHistory.objects.create(
             user=user,
@@ -350,17 +517,10 @@ def predict_energy(request):
             performance_category=monthly_category(eui),
             inputs=data,
         )
-
-        # consume one prediction (skip for admins)
+    
         if not user.is_staff:
-            # use model method if available
-            try:
-                sub.consume_prediction(1)
-            except Exception:
-                # fallback decrement & save
-                if sub.remaining_predictions is not None:
-                    sub.remaining_predictions = max(0, sub.remaining_predictions - 1)
-                    sub.save()
+            sub.remaining_predictions -= 1
+            sub.save()
 
         return Response({
             "record_id": record.id,
@@ -369,7 +529,14 @@ def predict_energy(request):
             "performance_category": record.performance_category,
             "impacting_factors": impacting,
             "recommendations": recs,
-            "remaining_predictions": sub.remaining_predictions
+
+            # -------- NEW OPTIMIZED PERFORMANCE --------
+            "optimized_energy_month_kwh": optimized["optimized_energy_month_kwh"] if optimized else None,
+"energy_savings_kwh": optimized["energy_savings_kwh"] if optimized else None,
+"energy_savings_percent": optimized["energy_savings_percent"] if optimized else None,
+"optimized_eui_kwh_m2": optimized["optimized_eui_kwh_m2"] if optimized else None,
+"optimized_category": optimized["optimized_category"] if optimized else None,
+
         })
 
     except Exception as e:
@@ -395,56 +562,6 @@ def get_my_history(request):
     return Response({"history": data})
 
 
-# -------------------------
-# PROFILE
-# -------------------------
-@api_view(["GET"])
-@permission_classes([IsAuthenticated])
-def get_profile(request):
-    user = request.user
-    total_predictions = PredictionHistory.objects.filter(user=user).count()
-    last = PredictionHistory.objects.filter(user=user).order_by("-created_at").first()
-
-    last_data = None
-    if last:
-        last_data = {
-            "id": last.id,
-            "building_type": last.building_type,
-            "energy": last.total_energy_month_kwh,
-            "eui": last.eui_month_kwh_m2,
-            "category": last.performance_category,
-            "inputs": last.inputs,
-            "date": last.created_at,
-        }
-
-    # add subscription summary
-    sub = None
-    try:
-        sub = Subscription.objects.get(user=user)
-        subscription_data = {
-            "plan": sub.plan,
-            "allowed_predictions": sub.allowed_predictions,
-            "remaining_predictions": sub.remaining_predictions,
-            "active": sub.active,
-            "start_date": sub.start_date,
-            "end_date": sub.end_date,
-        }
-    except Subscription.DoesNotExist:
-        subscription_data = None
-
-    return Response({
-        "username": user.username,
-        "is_admin": user.is_staff,
-        "joined_on": user.date_joined,
-        "total_predictions": total_predictions,
-        "last_prediction": last_data,
-        "subscription": subscription_data
-    })
-
-
-# -------------------------
-# DELETE HISTORY
-# -------------------------
 @api_view(["DELETE"])
 @permission_classes([IsAuthenticated])
 def delete_all_history(request):
@@ -464,68 +581,55 @@ def delete_history_item(request, pk):
 
 
 # -------------------------
-# ADMIN endpoints
+# PROFILE
 # -------------------------
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
-def admin_list_users(request):
-    if not request.user.is_staff:
-        return Response({"error": "Access denied"}, status=403)
+def get_profile(request):
+    user = request.user
 
-    users = User.objects.annotate(prediction_count=Count("predictionhistory")).order_by("-date_joined")
-    data = [{
-        "username": u.username,
-        "joined_on": u.date_joined,
-        "is_admin": u.is_staff,
-        "prediction_count": u.prediction_count,
-    } for u in users]
-    return Response({"users": data})
+    total_predictions = PredictionHistory.objects.filter(user=user).count()
+    last = PredictionHistory.objects.filter(user=user).order_by("-created_at").first()
 
+    last_data = None
+    if last:
+        last_data = {
+            "id": last.id,
+            "building_type": last.building_type,
+            "energy": last.total_energy_month_kwh,
+            "eui": last.eui_month_kwh_m2,
+            "category": last.performance_category,
+            "inputs": last.inputs,
+            "date": last.created_at,
+        }
 
-@api_view(["GET"])
-@permission_classes([IsAuthenticated])
-def admin_user_history(request, username):
-    if not request.user.is_staff:
-        return Response({"error": "Access denied"}, status=403)
+    try:
+        sub = Subscription.objects.get(user=user)
+        subscription_data = {
+            "plan": sub.plan,
+            "allowed_predictions": sub.allowed_predictions,
+            "remaining_predictions": sub.remaining_predictions,
+            "active": sub.active,
+            "start_date": sub.start_date,
+            "end_date": sub.end_date,
+        }
+    except:
+        subscription_data = None
 
-    user = get_object_or_404(User, username=username)
-    history = PredictionHistory.objects.filter(user=user).order_by("-created_at")
+    return Response({
+    "username": user.username,
+    "email": user.email,          # ✅ ADD THIS LINE
+    "is_admin": user.is_staff,
+    "joined_on": user.date_joined,
+    "total_predictions": total_predictions,
+    "last_prediction": last_data,
+    "subscription": subscription_data
+})
 
-    data = [{
-        "id": h.id,
-        "building_type": h.building_type,
-        "energy": h.total_energy_month_kwh,
-        "eui": h.eui_month_kwh_m2,
-        "category": h.performance_category,
-        "inputs": h.inputs,
-        "date": h.created_at,
-    } for h in history]
-
-    return Response({"username": user.username, "history": data})
-
-
-@api_view(["GET"])
-@permission_classes([IsAuthenticated])
-def admin_all_history(request):
-    if not request.user.is_staff:
-        return Response({"error": "Access denied"}, status=403)
-
-    records = PredictionHistory.objects.all().order_by("-created_at")
-    data = [{
-        "id": h.id,
-        "user": h.user.username,
-        "building_type": h.building_type,
-        "energy": h.total_energy_month_kwh,
-        "eui": h.eui_month_kwh_m2,
-        "category": h.performance_category,
-        "inputs": h.inputs,
-        "date": h.created_at,
-    } for h in records]
-    return Response({"all_history": data})
 
 
 # -------------------------
-# Update user (username / password)
+# Update user account
 # -------------------------
 @api_view(["PUT", "PATCH"])
 @permission_classes([IsAuthenticated])
@@ -559,62 +663,6 @@ def update_user(request):
     return Response({"message": "No changes"})
 
 
-# -------------------------
-# MANUAL PAYMENT REQUESTS
-# -------------------------
-@api_view(["POST"])
-@permission_classes([IsAuthenticated])
-@parser_classes([MultiPartParser, FormParser])
-def manual_payment_request(request):
-    user = request.user
-
-    plan = request.data.get("plan")
-    amount = request.data.get("amount") or 0
-
-    # NEW FIELDS
-    bank_name = request.data.get("bank_name", "")
-    txn_id = request.data.get("txn_id", "")
-
-    notes = request.data.get("notes", "")
-    screenshot = request.FILES.get("screenshot")
-
-    if not plan:
-        return Response({"error": "Missing plan"}, status=400)
-
-    # Save to DB
-    m = ManualPaymentRequest.objects.create(
-        user=user,
-        plan=plan,
-        amount=amount,
-        bank_name=bank_name,
-        txn_id=txn_id,
-        notes=notes,
-        screenshot=screenshot,
-        status="pending"
-    )
-
-    return Response({"message": "Saved", "request_id": m.id})
-
-
-@api_view(["GET"])
-@permission_classes([IsAuthenticated])
-def my_manual_requests(request):
-    user = request.user
-    items = ManualPaymentRequest.objects.filter(user=user).order_by("-created_at")
-    data = [{
-        "id": it.id,
-        "plan": it.plan,
-        "amount": float(it.amount),
-        "bank_name": it.bank_name,   # ← ADD HERE
-        "txn_id": it.txn_id, 
-        "txn_ref": it.txn_ref,
-        "notes": it.notes,
-        "status": it.status,
-        "created_at": it.created_at,
-        "screenshot_url": it.screenshot.url if it.screenshot else None,
-        "admin_note": it.admin_note,
-    } for it in items]
-    return Response({"requests": data})
 
 
 @api_view(["GET"])
@@ -631,122 +679,230 @@ def my_subscription(request):
             active=False
         )
 
-    data = {
-        "plan": sub.plan,
-        "allowed_predictions": sub.allowed_predictions,
-        "remaining_predictions": sub.remaining_predictions,
-        "active": sub.active,
-        "start_date": sub.start_date,
-        "end_date": sub.end_date,
-    }
-    return Response({"subscription": data})
+    return Response({
+        "subscription": {
+            "plan": sub.plan,
+            "allowed_predictions": sub.allowed_predictions,
+            "remaining_predictions": sub.remaining_predictions,
+            "active": sub.active,
+            "start_date": sub.start_date,
+            "end_date": sub.end_date,
+        }
+    })
+
+
+# -------------------------
+# ADMIN endpoints
+# -------------------------
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def admin_list_users(request):
+    if not request.user.is_staff:
+        return Response({"error": "Access denied"}, status=403)
+
+    users = User.objects.annotate(prediction_count=Count("predictionhistory")).order_by("-date_joined")
+
+    data = [{
+        "username": u.username,
+        "joined_on": u.date_joined,
+        "is_admin": u.is_staff,
+        "prediction_count": u.prediction_count,
+    } for u in users]
+
+    return Response({"users": data})
 
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
-def admin_list_manual_requests(request):
+def admin_user_history(request, username):
     if not request.user.is_staff:
         return Response({"error": "Access denied"}, status=403)
 
-    items = ManualPaymentRequest.objects.all().order_by("-created_at")
+    user = get_object_or_404(User, username=username)
+    history = PredictionHistory.objects.filter(user=user).order_by("-created_at")
+
     data = [{
-        "id": it.id,
-        "user": it.user.username,
-        "user_id": it.user.id,
-        "plan": it.plan,
-        "amount": float(it.amount),
-        "bank_name": it.bank_name,
-        "txn_id": it.txn_id,
+        "id": h.id,
+        "building_type": h.building_type,
+        "energy": h.total_energy_month_kwh,
+        "eui": h.eui_month_kwh_m2,
+        "category": h.performance_category,
+        "inputs": h.inputs,
+        "date": h.created_at,
+    } for h in history]
 
-        "txn_ref": it.txn_ref,
-        "notes": it.notes,
-        "status": it.status,
-        "screenshot_url": it.screenshot.url if it.screenshot else None,
-        "created_at": it.created_at,
-        "admin_note": it.admin_note,
-    } for it in items]
-    return Response({"requests": data})
+    return Response({"username": user.username, "history": data})
 
 
-@api_view(["POST"])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated])
-def admin_approve_manual_request(request, pk):
+def admin_all_history(request):
     if not request.user.is_staff:
         return Response({"error": "Access denied"}, status=403)
 
-    admin_user = request.user
-    try:
-        req = ManualPaymentRequest.objects.get(pk=pk)
-    except ManualPaymentRequest.DoesNotExist:
-        return Response({"error": "Not found"}, status=404)
+    records = PredictionHistory.objects.all().order_by("-created_at")
 
-    note = request.data.get("admin_note", "")
+    data = [{
+        "id": h.id,
+        "user": h.user.username,
+        "building_type": h.building_type,
+        "energy": h.total_energy_month_kwh,
+        "eui": h.eui_month_kwh_m2,
+        "category": h.performance_category,
+        "inputs": h.inputs,
+        "date": h.created_at,
+    } for h in records]
 
-    # mark approved
-    req.mark_approved(admin_user=admin_user)
-    if note:
-        req.admin_note = note
-        req.save()
+    return Response({"all_history": data})
 
-    # grant subscription and reset remaining predictions
-    sub, created = Subscription.objects.get_or_create(user=req.user)
-    sub.grant_plan(req.plan)  # grant_plan handles lowercasing and mapping
 
-    # Optionally return updated subscription state
-    return Response({
-        "message": "Approved and subscription granted",
-        "request_id": req.id,
-        "granted_plan": sub.plan,
-        "remaining_predictions": sub.remaining_predictions
-    })
 
-@api_view(["POST"])
-@permission_classes([IsAuthenticated])
-def admin_reject_manual_request(request, pk):
-    """Marks a manual payment request as rejected."""
-    if not request.user.is_staff:
-        return Response({"error": "Access denied"}, status=403)
 
-    admin_user = request.user
-    try:
-        req = ManualPaymentRequest.objects.get(pk=pk)
-    except ManualPaymentRequest.DoesNotExist:
-        return Response({"error": "Not found"}, status=404)
 
-    note = request.data.get("admin_note", "")
 
-    # mark rejected (from models.py)
-    req.mark_rejected(admin_user=admin_user, note=note) # Uses mark_rejected method
-    
-    # DO NOT grant subscription
-    return Response({
-        "message": "Request rejected",
-        "request_id": req.id,
-    })
 
-# --- NEW ADMIN DELETE ENDPOINT ---
-@api_view(["DELETE"])
-@permission_classes([IsAuthenticated])
-def admin_delete_manual_request(request, pk):
-    """Permanently deletes a manual payment request by primary key (pk)."""
-    if not request.user.is_staff:
-        return Response({"error": "Access denied"}, status=403)
 
-    try:
-        # Hard delete (removes record permanently)
-        req = ManualPaymentRequest.objects.get(pk=pk)
-        req.delete()
-        return Response({"message": f"Manual payment request {pk} permanently deleted."})
-    except ManualPaymentRequest.DoesNotExist:
-        return Response({"error": "Request not found"}, status=404)
-# --- END NEW ADMIN DELETE ENDPOINT ---
-
-# Plans listing
+# -------------------------
+# Plans (static)
+# -------------------------
 @api_view(["GET"])
 def get_plans(request):
-    plans = {
-        "basic": {"price": 75, "predictions": 100},
-        "super": {"price": 175, "predictions": 300},
-        "premium": {"price": 300, "predictions": 500},
+    return Response({
+        "plans": {
+            "basic": {"price": 75, "predictions": 100},
+            "super": {"price": 175, "predictions": 300},
+            "premium": {"price": 300, "predictions": 500},
+        }
+    })
+
+
+# -------------------------
+# Lookup username by email
+# -------------------------
+@api_view(["POST"])
+def get_username_by_email(request):
+    email = request.data.get("email")
+    if not email:
+        return Response({"error": "email required"}, status=400)
+
+    user = User.objects.filter(email=email).first()
+    if not user:
+        return Response({"error": "Not found"}, status=404)
+
+    return Response({"username": user.username})
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def create_razorpay_order(request):
+    plan = request.data.get("plan")
+    amount = request.data.get("amount")  # frontend will send price in rupees
+
+    if not plan or not amount:
+        return Response({"error": "plan and amount required"}, status=400)
+
+    try:
+        client = razorpay.Client(
+            auth=(settings.RAZORPAY_KEY_ID, settings.RAZORPAY_KEY_SECRET)
+        )
+
+        order_data = {
+            "amount": int(float(amount) * 100),   # convert to paise
+            "currency": "INR",
+            "payment_capture": 1
+        }
+
+        order = client.order.create(order_data)
+
+        return Response({
+            "order_id": order["id"],
+            "amount": order["amount"],
+            "currency": order["currency"],
+            "key": settings.RAZORPAY_KEY_ID,
+            "plan": plan
+        })
+
+    except Exception as e:
+        return Response({"error": str(e)}, status=500)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def verify_razorpay_payment(request):
+    razorpay_order_id = request.data.get("razorpay_order_id")
+    razorpay_payment_id = request.data.get("razorpay_payment_id")
+    razorpay_signature = request.data.get("razorpay_signature")
+    plan = request.data.get("plan")
+
+    if not all([razorpay_order_id, razorpay_payment_id, razorpay_signature, plan]):
+        return Response({"error": "Missing payment fields"}, status=400)
+
+    # 🔐 Verify Razorpay signature (OFFICIAL METHOD)
+    generated_signature = hmac.new(
+        settings.RAZORPAY_KEY_SECRET.encode(),
+        f"{razorpay_order_id}|{razorpay_payment_id}".encode(),
+        hashlib.sha256
+    ).hexdigest()
+
+    if generated_signature != razorpay_signature:
+        return Response({"error": "Payment verification failed"}, status=400)
+
+    # ✅ Activate subscription
+    sub, _ = Subscription.objects.get_or_create(user=request.user)
+    sub.grant_plan(plan)
+
+    PLAN_PRICES = {
+        "basic": 75,
+        "super": 175,
+        "premium": 300,
     }
-    return Response({"plans": plans})
+
+    amount_paid = PLAN_PRICES.get(plan.lower(), 0)
+
+    # 📧 Email (non-blocking)
+    try:
+        send_mail(
+            subject="✅ Your Enlite Subscription is Active",
+            message=(
+                f"Hello {request.user.username},\n\n"
+                f"Your payment was successful.\n\n"
+                f"Plan: {sub.plan.upper()}\n"
+                f"Amount Paid: ₹{amount_paid}\n"
+                f"Predictions Allowed: {sub.allowed_predictions}\n\n"
+                f"Thank you for choosing Enlite!"
+            ),
+            from_email=getattr(settings, "DEFAULT_FROM_EMAIL", None),
+            recipient_list=[request.user.email],
+            fail_silently=True,
+        )
+    except Exception as e:
+        print("Email failed:", e)
+
+    return Response({
+        "message": "Payment verified and plan activated",
+        "plan": sub.plan,
+        "remaining_predictions": sub.remaining_predictions,
+    })
+
+def is_already_optimized(user_vals):
+    optimal = {
+        "Floor_Insulation": 0.20,
+        "Door_Insulation": 1.00,
+        "Roof_Insulation": 0.15,
+        "Window_Insulation": 1.20,
+        "Wall_Insulation": 0.25,
+        "Hvac_Efficiency": 3.5,
+        "Domestic_Hot_Water_Usage": 1.50,
+        "Lighting_Density": 3,
+        "Occupancy_Level": 3,
+        "Equipment_Density": 8,
+        "Window_To_Wall_Ratio": 30
+    }
+
+    for k, opt in optimal.items():
+        try:
+            if abs(float(user_vals.get(k, 0)) - opt) > 0.01:
+                return False
+        except:
+            return False
+    return True

@@ -1,7 +1,7 @@
 // src/pages/RegisterPage.jsx
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { apiPost, setAuthToken } from "../lib/api";
+import { apiPost } from "../lib/api";
 
 export default function RegisterPage() {
   const [username, setUsername] = useState("");
@@ -21,31 +21,17 @@ export default function RegisterPage() {
         password,
       });
 
-      if (!res.token) {
-        alert(res.error || "Registration failed");
+      if (res?.error) {
+        alert(res.error);
         setBusy(false);
         return;
       }
 
-      // Set token for axios + save to localStorage
-      setAuthToken(res.token);
+      // Backend returns: { message: “Account created. Check your email.” }
+      alert(res.message || "Account created! Please check your email.");
 
-      // Store user info
-      localStorage.setItem("username", res.username);
-      localStorage.setItem("isAdmin", res.is_admin ? "true" : "false");
-
-      // Notify navbar to update
-      window.dispatchEvent(new Event("authChange"));
-
-      // Handle previous redirect request (if Try button triggered register)
-      const redirect = localStorage.getItem("postLoginRedirect");
-
-      if (redirect) {
-        localStorage.removeItem("postLoginRedirect");
-        navigate(redirect);
-      } else {
-        navigate("/profile");
-      }
+      // User must manually log in after confirming email.
+      navigate("/login");
     } catch (err) {
       console.error(err);
       alert(err?.response?.data?.error || "Registration failed");
@@ -57,7 +43,7 @@ export default function RegisterPage() {
   return (
     <div className="min-h-screen flex items-center justify-center p-6 bg-[#FCF5EE]">
       <div className="bg-white p-8 rounded shadow w-full max-w-md mt-20">
-        
+
         <h2 className="text-2xl font-bold mb-6 text-center">Register</h2>
 
         <form onSubmit={handleRegister} className="space-y-4">
