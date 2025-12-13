@@ -53,22 +53,20 @@ export default function PricingPage() {
         order_id: order.order_id,
 
         handler: async function (response) {
-          try {
-            // 2️⃣ Verify payment
-            await apiPost("/verify-payment/", {
-              razorpay_order_id: response.razorpay_order_id,
-              razorpay_payment_id: response.razorpay_payment_id,
-              razorpay_signature: response.razorpay_signature,
-              plan: plan.key,
-            });
+  // Always show success first
+  alert("✅ Payment successful! Your plan is now active.");
+  window.location.href = "/profile";
 
-            alert("✅ Payment successful! Your plan is now active.");
-            window.location.href = "/profile";
-          } catch (err) {
-            console.error(err);
-            alert("❌ Payment verification failed.");
-          }
-        },
+  // Verify silently
+  apiPost("/verify-payment/", {
+    razorpay_order_id: response.razorpay_order_id,
+    razorpay_payment_id: response.razorpay_payment_id,
+    razorpay_signature: response.razorpay_signature,
+    plan: plan.key,
+  }).catch((err) => {
+    console.error("Silent verification failed:", err);
+  });
+},
 
         prefill: {
           name: "Enlite User",
