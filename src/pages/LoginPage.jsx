@@ -90,7 +90,7 @@ export default function LoginPage() {
           <input
             value={identifier}
             onChange={(e) => setIdentifier(e.target.value)}
-            placeholder="Email"
+            placeholder="Username"
             className="w-full border px-3 py-2 rounded"
             required
           />
