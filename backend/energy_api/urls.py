@@ -16,6 +16,7 @@ from .views import (
     reset_password,
 
     get_profile,
+    get_username_by_email,
     update_user,
 
     get_my_history,
@@ -42,6 +43,8 @@ urlpatterns = [
     # Auth
     path("register/", register_user),
     path("login/", login_user),
+    path("get-username-by-email/", get_username_by_email),
+
 
     # Password reset
     path("forgot-password/request/", forgot_password_request),
