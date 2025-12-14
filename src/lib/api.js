@@ -10,7 +10,16 @@ import axios from "axios";
 
 export const API_BASE =
   import.meta.env.VITE_API_BASE ||
-  "https://ingenious-warmth-production-4a41.up.railway.app/api/";
+  "https://pleasant-nature-production-b708.up.railway.app/api/";
+
+// export const API_BASE =
+//   import.meta.env.VITE_API_BASE ||
+//   "https://chchandra614-enlite-backend.hf.space/api/";
+
+
+// export const API_BASE =
+//   import.meta.env.VITE_API_BASE ||
+//   "https://enlite-2.onrender.com/api/";
 
 // export const API_BASE =
 //   import.meta.env.VITE_API_BASE ||
