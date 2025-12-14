@@ -5,13 +5,13 @@ import axios from "axios";
 // BASE URL
 // -----------------------------------------
 
-// export const API_BASE =
-//   import.meta.env.VITE_API_BASE ||
-//   "https://pleasant-nature-production-b708.up.railway.app/api/";
-
 export const API_BASE =
   import.meta.env.VITE_API_BASE ||
-  "https://serene-love-production-5eb5.up.railway.app/api/";
+  "https://pleasant-nature-production-b708.up.railway.app/api/";
+
+// export const API_BASE =
+//   import.meta.env.VITE_API_BASE ||
+//   "https://serene-love-production-5eb5.up.railway.app/api/";
 
 
 // export const API_BASE =
