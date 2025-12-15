@@ -129,7 +129,7 @@ function PredictionDetails({ item, onBack }) {
 
   return (
     <motion.div
-      className="space-y-10 p-4 md:p-8 bg-gray-50 min-h-screen"
+      className="space-y-10 px-4 py-6 sm:px-6 md:px-8 bg-gray-50"
       variants={pageTransitionVariants}
       initial="initial"
       animate="animate"
@@ -144,11 +144,11 @@ function PredictionDetails({ item, onBack }) {
         <h2 className="text-3xl font-extrabold mb-8 text-center text-blue-800 tracking-tight">
           Performance Analysis
         </h2>
-        <div className="grid md:grid-cols-3 gap-6 text-center">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 place-items-center text-center">
           
           {/* Energy Card (Staggered Entry 1) */}
           <motion.div
-            className="p-6 bg-blue-50 rounded-xl shadow-lg transform hover:scale-[1.03] transition duration-300 ring-2 ring-blue-300"
+            className="w-full max-w-sm p-2 h-full bg-blue-50 rounded-xl shadow-lg transform hover:scale-[1.03] transition duration-300 ring-2 ring-blue-300"
             variants={metricCardVariants}
             initial="initial"
             animate="animate"
@@ -166,7 +166,7 @@ function PredictionDetails({ item, onBack }) {
 
           {/* EUI Card (Staggered Entry 2) */}
           <motion.div
-            className="p-6 bg-blue-50 rounded-xl shadow-lg transform hover:scale-[1.03] transition duration-300 ring-2 ring-blue-300"
+            className="w-full max-w-sm p-2 h-full bg-blue-50 rounded-xl shadow-lg transform hover:scale-[1.03] transition duration-300 ring-2 ring-blue-300"
             variants={metricCardVariants}
             initial="initial"
             animate="animate"
@@ -285,7 +285,7 @@ export default function HistoryPage() {
   // Refactored structure: Always render the container, but use AnimatePresence
   // to toggle the content (List vs. Details).
   return (
-    <div className="max-w-7xl mx-auto mt-24 p-6 md:p-8">
+    <div className="max-w-7xl mx-auto mt-16 lg:mt-24 p-6 md:p-8">
       
       <AnimatePresence mode="wait">
         {selectedItem ? (

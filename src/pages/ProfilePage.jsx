@@ -92,7 +92,7 @@ export default function ProfilePage() {
     }
   }
 
-  if (!profile) return <h1 className="mt-28 text-center">Loading...</h1>;
+  if (!profile) return <h1 className="mt-16 lg:mt-24 text-center">Loading...</h1>;
 
   // UPDATED: Dynamic status styling and message generation (using current subscription data)
   const getStatusStyle = (status) => {
@@ -142,8 +142,8 @@ export default function ProfilePage() {
   const statusInfo = requestStatus ? getStatusStyle(requestStatus.status) : null;
 
   return (
-    <div className="max-w-6xl mx-auto mt-24 p-6"> {/* Increased width and top margin */}
-      <h1 className="text-4xl font-extrabold mb-8 text-blue-700">User Profile Dashboard</h1>
+    <div className="max-w-6xl mx-auto mt-16 lg:mt-24 p-6"> {/* Increased width and top margin */}
+      <h1 className="text-4xl font-extrabold mb-8 mt-16 text-blue-700">User Profile Dashboard</h1>
 
       {/* NEW: Manual Request Status Notification */}
       {requestStatus && statusInfo && (
@@ -188,7 +188,7 @@ export default function ProfilePage() {
               <strong className="text-gray-600">Username:</strong> <span className="text-blue-600 font-semibold">{profile.username}</span>
             </p>
             <p>
-              <strong className="text-gray-600">Role:</strong>
+              <strong className="text-gray-600">Role: </strong>
               <span className={`font-medium ${profile.is_admin ? "text-red-500" : "text-green-500"}`}>
                 {profile.is_admin ? "Admin" : "User"}
               </span>
