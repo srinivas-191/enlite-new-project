@@ -238,7 +238,7 @@ export default function AdminUserHistory() {
 
   if (!data)
     return (
-      <h1 className="text-center text-blue-600 mt-32 text-2xl font-semibold">
+      <h1 className="text-center text-blue-600 mt-16 lg:mt-24 text-2xl font-semibold">
         Loading User History...
       </h1>
     );
