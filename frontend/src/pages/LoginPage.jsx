@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { apiPost, apiGet, setAuthToken } from "../lib/api";
 
 export default function LoginPage() {
-  const [identifier, setIdentifier] = useState(""); // username OR email
+  const [identifier, setIdentifier] = useState(""); //username OR email
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const navigate = useNavigate();
