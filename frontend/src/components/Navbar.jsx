@@ -48,7 +48,7 @@ export default function Navbar() {
         </NavLink>
 
         {/* DESKTOP MENU */}
-        <ul className="hidden md:flex space-x-5 text-lg font-medium mx-auto">
+        <ul className="hidden lg:flex space-x-5 text-lg font-medium mx-auto">
           <NavItem to="/home" label="Home" />
           <NavItem to="/about" label="About" />
           <NavItem to="/solutions" label="Our AI" />
@@ -73,7 +73,7 @@ export default function Navbar() {
         </ul>
 
         {/* DESKTOP AUTH */}
-        <div className="hidden md:flex gap-4">
+        <div className="hidden lg:flex gap-4">
           {!logged ? (
             <>
               <button onClick={() => navigate("/login")} className="text-sia-blue">Login</button>
@@ -85,14 +85,14 @@ export default function Navbar() {
         </div>
 
         {/* MOBILE MENU ICON */}
-        <button className="md:hidden text-black focus:outline-none" onClick={() => setOpen(!open)}>
+        <button className="lg:hidden text-black focus:outline-none" onClick={() => setOpen(!open)}>
           {open ? <X /> : <Menu />}
         </button>
       </div>
 
       {/* MOBILE MENU */}
       {open && (
-        <div className="md:hidden bg-white border-t border-gray-200">
+        <div className="lg:hidden bg-white border-t border-gray-200">
           <ul className="flex flex-col space-y-4 py-4 px-6 text-lg font-medium">
             <NavItem to="/home" label="Home" setOpen={setOpen} />
             <NavItem to="/about" label="About" setOpen={setOpen} />

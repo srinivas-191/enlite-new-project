@@ -12,7 +12,10 @@ export default function LoginPage() {
   // Try logging in using a username
   async function attemptLoginWithUsername(usernameToTry) {
     try {
-      const res = await apiPost("/login/", { username: usernameToTry, password });
+      const res = await apiPost("/login/", {
+        username: usernameToTry,
+        password,
+      });
       return res;
     } catch (err) {
       return { error: err?.response?.data?.error || "Login failed" };
@@ -28,7 +31,9 @@ export default function LoginPage() {
     // If login failed *and* identifier looks like an email → map email to username
     if (res?.error && identifier.includes("@")) {
       try {
-        const map = await apiPost("/get-username-by-email/", { email: identifier });
+        const map = await apiPost("/get-username-by-email/", {
+          email: identifier,
+        });
         if (map?.username) {
           res = await attemptLoginWithUsername(map.username);
         }
@@ -83,7 +88,6 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center p-6 bg-[#FCF5EE]">
       <div className="bg-white p-8 rounded shadow w-full max-w-md mt-20">
-
         <h2 className="text-2xl font-bold mb-6 text-center">Login</h2>
 
         <form onSubmit={handleLogin} className="space-y-4">
@@ -132,7 +136,6 @@ export default function LoginPage() {
             Register
           </span>
         </p>
-
       </div>
     </div>
   );

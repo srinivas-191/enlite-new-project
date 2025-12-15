@@ -119,7 +119,7 @@ export default function AdminDashboard() {
   }, []);
 
   return (
-    <div className="max-w-7xl mx-auto mt-24 p-6">
+    <div className="max-w-7xl mx-auto mt-16 lg:mt-24 p-6">
       {/* ---------------- HEADER ---------------- */}
       <div className="mb-10">
         <h1 className="text-4xl font-extrabold text-blue-900 flex items-center">

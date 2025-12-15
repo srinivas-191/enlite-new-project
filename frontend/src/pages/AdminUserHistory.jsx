@@ -246,7 +246,7 @@ export default function AdminUserHistory() {
   // Detail View
   if (selectedItem) {
     return (
-      <div className="max-w-6xl mx-auto mt-24 p-8">
+      <div className="max-w-6xl mx-auto mt-16 lg:mt-24 p-8">
         <PredictionDetails
           item={selectedItem}
           onBack={() => {
@@ -260,13 +260,13 @@ export default function AdminUserHistory() {
 
   // List View
   return (
-    <div className="max-w-6xl mx-auto mt-24 p-8 bg-white rounded-2xl shadow-xl">
+    <div className="max-w-6xl mx-auto mt-16 lg:mt-24 p-8 rounded-2xl shadow-xl">
       <h1 className="text-4xl font-extrabold mb-8">
         History for <span className="text-blue-700">{data.username}</span>
       </h1>
 
       {data.history.length === 0 ? (
-        <div className="text-center p-10 bg-blue-50 rounded-lg">
+        <div className="text-center p-10 rounded-lg">
           <p className="text-xl text-gray-600">
             No predictions found for this user.
           </p>
@@ -285,7 +285,7 @@ export default function AdminUserHistory() {
               <motion.div
                 key={item.id}
                 variants={cardVariants}
-                className="border p-5 rounded-xl shadow-lg cursor-pointer hover:shadow-2xl hover:bg-blue-50/40 transition"
+                className="border p-5 bg-gray-50 rounded-xl shadow-lg cursor-pointer hover:shadow-2xl hover:bg-blue-50/40 transition"
                 onClick={() => {
                   setSelectedItem(item);
                   window.scrollTo({ top: 0, behavior: "smooth" });
