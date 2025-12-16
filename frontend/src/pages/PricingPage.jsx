@@ -86,7 +86,7 @@ export default function PricingPage() {
   };
 
   return (
-    <div className="max-w-7xl mx-auto mt-24 p-6">
+    <div className="max-w-7xl mx-auto mt-16 lg:mt-24 p-6">
       <div className="text-center mb-12">
         <h2 className="text-5xl font-extrabold text-gray-900">
           Transparent Pricing
