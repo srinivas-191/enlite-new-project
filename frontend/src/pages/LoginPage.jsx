@@ -2,12 +2,15 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { apiPost, apiGet, setAuthToken } from "../lib/api";
+import { Eye, EyeOff } from "lucide-react";
 
 export default function LoginPage() {
   const [identifier, setIdentifier] = useState(""); //username OR email
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const navigate = useNavigate();
+  const [showPassword, setShowPassword] = useState(false);
+
 
   // Try logging in using a username
   async function attemptLoginWithUsername(usernameToTry) {
@@ -99,14 +102,25 @@ export default function LoginPage() {
             required
           />
 
-          <input
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="Password"
-            type="password"
-            className="w-full border px-3 py-2 rounded"
-            required
-          />
+          <div className="relative">
+            <input
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Password"
+              type={showPassword ? "text" : "password"}
+              className="w-full border px-3 py-2 rounded pr-10"
+              required
+            />
+
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500"
+            >
+              {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+            </button>
+          </div>
+
 
           <button
             disabled={busy}
