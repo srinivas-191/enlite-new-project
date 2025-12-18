@@ -9,8 +9,13 @@ export default function Navbar() {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [logged, setLogged] = useState(!!localStorage.getItem("token"));
-  const [isAdmin, setIsAdmin] = useState(localStorage.getItem("isAdmin") === "true");
-  const [username, setUsername] = useState(localStorage.getItem("username") || "");
+  const [isAdmin, setIsAdmin] = useState(
+    localStorage.getItem("isAdmin") === "true"
+  );
+  const [username, setUsername] = useState(
+    localStorage.getItem("username") || ""
+  );
+  const [mobileAccountOpen, setMobileAccountOpen] = useState(false);
 
   useEffect(() => {
     AOS.init({ duration: 800, once: true });
@@ -38,17 +43,26 @@ export default function Navbar() {
   }
 
   return (
-    <nav className="bg-white text-black shadow-sm border-b border-gray-300 fixed w-full top-0 z-50" data-aos="fade-down">
+    <nav
+      className="bg-white text-black shadow-sm border-b border-gray-300 fixed w-full top-0 z-50 py-2"
+      data-aos="fade-down"
+    >
       <div className="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
-
         {/* LOGO */}
-        <NavLink to="/" className="flex items-center space-x-2 text-2xl no-underline font-extrabold tracking-wider">
-          <img src="/assets/ELogo.png" alt="logo" className="w-9 h-9 rounded-full border border-gray-300 shadow-sm" />
+        <NavLink
+          to="/"
+          className="flex items-center space-x-2 text-2xl no-underline font-extrabold tracking-wider"
+        >
+          <img
+            src="/assets/ELogo.png"
+            alt="logo"
+            className="w-9 h-9 rounded-full border border-gray-300 shadow-sm"
+          />
           Enlite
         </NavLink>
 
         {/* DESKTOP MENU */}
-        <ul className="hidden lg:flex space-x-5 text-lg font-medium mx-auto">
+        <ul className="hidden lg:flex flex-1 justify-center space-x-6 text-lg font-medium">
           <NavItem to="/home" label="Home" />
           <NavItem to="/about" label="About" />
           <NavItem to="/solutions" label="Our AI" />
@@ -58,13 +72,23 @@ export default function Navbar() {
 
           {logged && !isAdmin && (
             <div className="relative group">
-              <button className="p-2 px-3 rounded inline-flex items-center gap-2">
+              <button className="px-3 inline-flex items-center gap-2">
                 {username || "Account"} ▾
               </button>
 
               <div className="absolute bg-white border rounded shadow-lg hidden group-hover:block z-40 min-w-[150px]">
-                <button onClick={() => navigate("/profile")} className="block w-full text-left px-4 py-2 hover:bg-gray-100">Profile</button>
-                <button onClick={() => navigate("/history")} className="block w-full text-left px-4 py-2 hover:bg-gray-100">History</button>
+                <button
+                  onClick={() => navigate("/profile")}
+                  className="block w-full text-left px-4 py-2 hover:bg-gray-100"
+                >
+                  Profile
+                </button>
+                <button
+                  onClick={() => navigate("/history")}
+                  className="block w-full text-left px-4 py-2 hover:bg-gray-100"
+                >
+                  History
+                </button>
               </div>
             </div>
           )}
@@ -73,19 +97,37 @@ export default function Navbar() {
         </ul>
 
         {/* DESKTOP AUTH */}
-        <div className="hidden lg:flex gap-4">
+        <div className="hidden lg:flex items-center  gap-4">
           {!logged ? (
             <>
-              <button onClick={() => navigate("/login")} className="text-sia-blue">Login</button>
-              <button onClick={() => navigate("/register")} className="bg-sia-blue text-white px-4 py-2 rounded">Sign Up</button>
+              <button
+                onClick={() => navigate("/login")}
+                className="text-sia-blue"
+              >
+                Login
+              </button>
+              <button
+                onClick={() => navigate("/register")}
+                className="bg-sia-blue text-white px-4 py-2 rounded"
+              >
+                Sign Up
+              </button>
             </>
           ) : (
-            <button onClick={logout} className="bg-red-600 text-white px-4 py-2 rounded">Logout</button>
+            <button
+              onClick={logout}
+              className="bg-red-600 text-white px-4 py-2 rounded"
+            >
+              Logout
+            </button>
           )}
         </div>
 
         {/* MOBILE MENU ICON */}
-        <button className="lg:hidden text-black focus:outline-none" onClick={() => setOpen(!open)}>
+        <button
+          className="lg:hidden text-black focus:outline-none"
+          onClick={() => setOpen(!open)}
+        >
           {open ? <X /> : <Menu />}
         </button>
       </div>
@@ -99,24 +141,85 @@ export default function Navbar() {
             <NavItem to="/solutions" label="Our AI" setOpen={setOpen} />
             <NavItem to="/contact" label="Contact" setOpen={setOpen} />
 
-            {logged && !isAdmin && <NavItem to="/pricing" label="Pricing" setOpen={setOpen} />}
-            {logged && isAdmin && <NavItem to="/admin-dashboard" label="Admin" setOpen={setOpen} />}
+            {logged && !isAdmin && (
+              <NavItem to="/pricing" label="Pricing" setOpen={setOpen} />
+            )}
+            {logged && isAdmin && (
+              <NavItem to="/admin-dashboard" label="Admin" setOpen={setOpen} />
+            )}
 
             {!logged ? (
               <>
-                <button onClick={() => { setOpen(false); navigate("/login"); }} className="w-full p-3 text-left">Login</button>
-                <button onClick={() => { setOpen(false); navigate("/register"); }} className="w-full p-3 text-left">Sign Up</button>
+                <button
+                  onClick={() => {
+                    setOpen(false);
+                    navigate("/login");
+                  }}
+                  className="w-full p-3 text-left"
+                >
+                  Login
+                </button>
+                <button
+                  onClick={() => {
+                    setOpen(false);
+                    navigate("/register");
+                  }}
+                  className="w-full p-3 text-left"
+                >
+                  Sign Up
+                </button>
               </>
             ) : (
               <>
                 {!isAdmin && (
-                  <>
-                    <button onClick={() => { setOpen(false); navigate("/profile"); }} className="w-full p-3 text-left">Profile</button>
-                    <button onClick={() => { setOpen(false); navigate("/history"); }} className="w-full p-3 text-left">History</button>
-                  </>
+                  <div className="w-full">
+                    {/* Username button */}
+                    <button
+                      onClick={() => setMobileAccountOpen(!mobileAccountOpen)}
+                      className="w-full flex justify-between items-center px-3 py-2"
+                    >
+                      {username || "Account"}
+                      <span>{mobileAccountOpen ? "▲" : "▼"}</span>
+                    </button>
+
+                    {/* Dropdown */}
+                    {mobileAccountOpen && (
+                      <div className="mt-2 bg-white shadow">
+                        <button
+                          onClick={() => {
+                            setOpen(false);
+                            setMobileAccountOpen(false);
+                            navigate("/profile");
+                          }}
+                          className="block w-full text-left px-4 py-2 hover:bg-gray-100"
+                        >
+                          Profile
+                        </button>
+
+                        <button
+                          onClick={() => {
+                            setOpen(false);
+                            setMobileAccountOpen(false);
+                            navigate("/history");
+                          }}
+                          className="block w-full text-left px-4 py-2 hover:bg-gray-100"
+                        >
+                          History
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 )}
 
-                <button onClick={() => { setOpen(false); logout(); }} className="px-3 py-2 text-left bg-red-600 text-white rounded">Logout</button>
+                <button
+                  onClick={() => {
+                    setOpen(false);
+                    logout();
+                  }}
+                  className="px-3 py-2 text-left bg-red-600 text-white rounded"
+                >
+                  Logout
+                </button>
               </>
             )}
           </ul>
