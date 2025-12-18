@@ -288,19 +288,22 @@ def register_user(request):
     password = request.data.get("password")
     email = request.data.get("email")
     subject = "Welcome to Enlite — Your Account is Ready"
-    message = (
-        f"Hello {username},\n\n"
-        "Welcome to Enlite! Your account has been successfully created.\n\n"
-        "Thank you for choosing us as your partner in building intelligence. With Enlite, "
-        "you can now leverage advanced analytics to predict building measurements and "
-        "gain deep insights into energy consumption patterns. Our platform is designed "
-        "not only to track your current usage but to provide actionable paths for "
-        "future efficiency improvements.\n\n"
-        "We are excited to help you start your journey toward smarter energy management.\n\n"
-        "Best regards,\n\n"
-        "Rajoli Srinivas\n"
-        "The Enlite Team"
-    )
+    message = f"""
+    Hello {username},
+
+    Welcome to Enlite! Your account has been successfully created.
+
+    Thank you for choosing us as your partner in building intelligence. With Enlite, you can now leverage advanced analytics to predict building measurements and gain deep insights into energy consumption patterns. 
+
+    Our platform is designed not only to track your current usage but to provide actionable paths for future efficiency improvements.
+
+    We are excited to help you start your journey toward smarter energy management.
+
+    Best regards,
+
+    Rajoli Srinivas
+    The Enlite Team
+        """
 
     if not username or not password or not email:
         return Response({"error": "username, email and password required"}, status=400)
@@ -383,20 +386,22 @@ def forgot_password_request(request):
 
     # Professional industrial-style message
     subject = "Reset Your Enlite Account Password"
-    message = (
-        f"Hello {user.username if hasattr(user, 'username') else 'there'},\n\n"
-        "We received a request to reset the password for your Enlite account. "
-        "To proceed with the password reset process, please use the following "
-        "One-Time Password (OTP):\n\n"
-        f"Verification Code: {otp}\n\n"
-        "This code is required to verify your identity and ensure your account "
-        "remains secure. Please enter this code on the reset page within the app.\n\n"
-        "Security Note: This code is valid for a limited time. If you did not "
-        "request a password reset, please ignore this email or contact our support "
-        "team immediately to secure your account.\n\n"
-        "Best regards,\n"
-        "The Enlite Security Team"
-    )
+    message = f"""
+    Hello {user.username},
+
+    We received a request to reset the password for your Enlite account. To proceed, please use the verification code provided below:
+
+    ------------------------
+    OTP CODE: {otp}
+    ------------------------
+
+    This code is required to verify your identity and ensure your account remains secure. Please enter this code on the reset page within the application.
+
+    Security Note: This code is valid for a limited time. If you did not request a password reset, please ignore this email or contact our support team immediately.
+
+    Best regards,
+    The Enlite Security Team
+        """
 
     try:
         send_email(
