@@ -381,21 +381,34 @@ def forgot_password_request(request):
     otp = str(random.randint(100000, 999999))
     PasswordResetOTP.objects.create(user=user, otp=otp)
 
+    # Professional industrial-style message
+    subject = "Reset Your Enlite Account Password"
+    message = (
+        f"Hello {user.username if hasattr(user, 'username') else 'there'},\n\n"
+        "We received a request to reset the password for your Enlite account. "
+        "To proceed with the password reset process, please use the following "
+        "One-Time Password (OTP):\n\n"
+        f"Verification Code: {otp}\n\n"
+        "This code is required to verify your identity and ensure your account "
+        "remains secure. Please enter this code on the reset page within the app.\n\n"
+        "Security Note: This code is valid for a limited time. If you did not "
+        "request a password reset, please ignore this email or contact our support "
+        "team immediately to secure your account.\n\n"
+        "Best regards,\n"
+        "The Enlite Security Team"
+    )
+
     try:
         send_email(
-            subject="Your Password Reset OTP",
-            message=f"Your OTP is: {otp}",
+            subject=subject,
+            message=message,
             to_email=email
         )
     except Exception as e:
         print("❌ OTP EMAIL FAILED:", repr(e))
-        raise e   # ⬅️ VERY IMPORTANT
-
-    except:
         return Response({"error": "Failed to send OTP"}, status=500)
 
-    return Response({"message": "OTP sent"})
-
+    return Response({"message": "OTP sent successfully"})
 
 @api_view(["POST"])
 def verify_otp(request):
