@@ -287,6 +287,20 @@ def register_user(request):
     username = request.data.get("username")
     password = request.data.get("password")
     email = request.data.get("email")
+    subject = "Welcome to Enlite — Your Account is Ready"
+    message = (
+        f"Hello {username},\n\n"
+        "Welcome to Enlite! Your account has been successfully created.\n\n"
+        "Thank you for choosing us as your partner in building intelligence. With Enlite, "
+        "you can now leverage advanced analytics to predict building measurements and "
+        "gain deep insights into energy consumption patterns. Our platform is designed "
+        "not only to track your current usage but to provide actionable paths for "
+        "future efficiency improvements.\n\n"
+        "We are excited to help you start your journey toward smarter energy management.\n\n"
+        "Best regards,\n\n"
+        "Rajoli Srinivas\n"
+        "The Enlite Team"
+    )
 
     if not username or not password or not email:
         return Response({"error": "username, email and password required"}, status=400)
@@ -306,9 +320,10 @@ def register_user(request):
     )
 
     try:
+        
         send_email(
-            subject="Welcome — Your account has been created",
-            message=f"Hello {username}, your account has been created.",
+            subject=subject,
+            message=message,
             to_email=email
         )
 
