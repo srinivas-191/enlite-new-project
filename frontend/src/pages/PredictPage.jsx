@@ -69,6 +69,47 @@ const getUnit = (key) => {
   }
 };
 
+// Helper function for consistent trial text display
+const getTrialTextHTML = (isAdmin, remainingTrials) => {
+  if (isAdmin) {
+    return (
+      <span className="fw-bold">
+        Admin: <span className="fw-medium">unlimited predictions.</span>
+      </span>
+    );
+  }
+
+  if (remainingTrials === null) {
+    return <span>Free trial: predictions (login to track usage).</span>;
+  }
+
+  if (remainingTrials === Infinity) {
+    return <span>Unlimited predictions.</span>;
+  }
+
+  return (
+    <span>
+      Free predictions remaining: <strong>{remainingTrials}</strong>
+    </span>
+  );
+};
+
+const getTrialText = (isAdmin, remainingTrials) => {
+  if (isAdmin) {
+    return "Admin: unlimited predictions.";
+  }
+
+  if (remainingTrials === null) {
+    return "Free trial remaining: checking...";
+  }
+
+  if (remainingTrials === Infinity) {
+    return "Unlimited predictions.";
+  }
+
+  return `Free trial remaining: ${remainingTrials}`;
+};
+
 export default function PredictPage() {
   const navigate = useNavigate();
 
@@ -90,6 +131,16 @@ export default function PredictPage() {
   const [remainingTrials, setRemainingTrials] = useState(null); // null = unknown, number = remaining, Infinity = unlimited
   const [isAdmin, setIsAdmin] = useState(false);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+
+  // Debug state changes
+  useEffect(() => {
+    console.log(
+      "State updated - isAdmin:",
+      isAdmin,
+      "remainingTrials:",
+      remainingTrials
+    );
+  }, [isAdmin, remainingTrials]);
 
   // Scroll to top on step change
   useEffect(() => {
@@ -161,6 +212,8 @@ export default function PredictPage() {
     })();
 
     // fetch subscription/profile if token exists
+    // In the initial useEffect, replace the subscription/profile fetching section with this:
+
     (async () => {
       const token = localStorage.getItem("token");
       if (!token) {
@@ -169,63 +222,71 @@ export default function PredictPage() {
         return;
       }
 
-      // ensure auth header is set
       try {
         setAuthToken(token);
       } catch {}
 
-      // Prefer the dedicated subscription endpoint if available
+      let adminDetected = false;
+      let trialsValue = null;
+
       try {
+        // Try subscription endpoint first
         const sres = await apiGet("/subscription/");
+        console.log("Subscription response on mount:", sres); // Debug log
+
         if (sres && sres.subscription) {
           const sub = sres.subscription;
-          const adminFlag = !!sub.is_admin; // may be undefined; fallback to profile below
-          // set admin only if confirmed (some implementations don't return is_admin here)
+
+          // Check admin flag in subscription
+          const adminFlag = !!sub.is_admin;
+          console.log("Admin flag from subscription:", adminFlag); // Debug log
+          adminDetected = adminFlag;
+
           if (adminFlag) {
-            setIsAdmin(true);
-            setRemainingTrials(Infinity);
+            trialsValue = Infinity;
+            console.log(
+              "Admin detected from subscription: unlimited predictions"
+            );
           } else {
+            // Not admin, check remaining predictions
             if (typeof sub.remaining_predictions === "number") {
-              setIsAdmin(false);
-              setRemainingTrials(sub.remaining_predictions);
+              trialsValue = sub.remaining_predictions;
               if (sub.remaining_predictions <= 0) setShowUpgradeModal(true);
-            } else {
-              // fallback to profile
-              const p = await apiGet("/profile/");
-              const total = Number(p.total_predictions || 0);
-              const adminFromProfile = !!p.is_admin;
-              setIsAdmin(adminFromProfile);
-              if (adminFromProfile) setRemainingTrials(Infinity);
-              else {
-                const rem = Math.max(0, 10 - total);
-                setRemainingTrials(rem);
-                if (rem <= 0) setShowUpgradeModal(true);
-              }
             }
           }
-          return;
         }
-      } catch {
-        // ignore and fallback to profile
+      } catch (err) {
+        console.log("Subscription endpoint error:", err); // Debug log
       }
 
-      // fallback: profile to compute remaining (backwards-compatible)
-      try {
-        const p = await apiGet("/profile/");
-        const total = Number(p.total_predictions || 0);
-        const adminFlag = !!p.is_admin;
-        setIsAdmin(adminFlag);
-        if (adminFlag) {
-          setRemainingTrials(Infinity);
-        } else {
-          const rem = Math.max(0, 10 - total);
-          setRemainingTrials(rem);
-          if (rem <= 0) setShowUpgradeModal(true);
+      // If admin not detected from subscription OR trials not set, check profile
+      if (!adminDetected || trialsValue === null) {
+        try {
+          const p = await apiGet("/profile/");
+          console.log("Profile response on mount:", p); // Debug log
+
+          const adminFlag = !!p.is_admin;
+          console.log("Admin flag from profile:", adminFlag); // Debug log
+
+          // Override with profile admin status if it's true
+          if (adminFlag) {
+            adminDetected = true;
+            trialsValue = Infinity;
+            console.log("Admin detected from profile: unlimited predictions");
+          } else if (trialsValue === null) {
+            // Only set trials from profile if not already set and not admin
+            const total = Number(p.total_predictions || 0);
+            trialsValue = Math.max(0, 10 - total);
+            if (trialsValue <= 0) setShowUpgradeModal(true);
+          }
+        } catch (err) {
+          console.log("Profile endpoint error:", err); // Debug log
         }
-      } catch {
-        setRemainingTrials(null);
-        setIsAdmin(false);
       }
+
+      // Set the state once
+      setIsAdmin(adminDetected);
+      setRemainingTrials(trialsValue);
     })();
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -305,11 +366,17 @@ export default function PredictPage() {
       if (num < min) {
         clamped = min;
         setRangeError((prev) => ({ ...prev, [key]: true }));
-        setTimeout(() => setRangeError((prev) => ({ ...prev, [key]: false })), 900);
+        setTimeout(
+          () => setRangeError((prev) => ({ ...prev, [key]: false })),
+          900
+        );
       } else if (num > max) {
         clamped = max;
         setRangeError((prev) => ({ ...prev, [key]: true }));
-        setTimeout(() => setRangeError((prev) => ({ ...prev, [key]: false })), 900);
+        setTimeout(
+          () => setRangeError((prev) => ({ ...prev, [key]: false })),
+          900
+        );
       }
       setForm((prev) => ({ ...prev, [key]: fmt2(clamped) }));
     } else {
@@ -384,55 +451,65 @@ export default function PredictPage() {
     } catch {}
 
     // If remainingTrials unknown, fetch subscription/profile
+    // In startFlow function, update the subscription/profile fetching section:
+
     if (remainingTrials === null) {
       try {
+        let adminDetected = false;
+        let trialsValue = null;
+
         // Prefer subscription endpoint
         const sres = await apiGet("/subscription/");
+        console.log("Subscription response in startFlow:", sres); // Debug log
+
         if (sres && sres.subscription) {
           const sub = sres.subscription;
-          if (typeof sub.remaining_predictions === "number") {
-            setIsAdmin(!!sub.is_admin);
-            if (sub.is_admin) {
-              setRemainingTrials(Infinity);
-            } else {
-              setRemainingTrials(sub.remaining_predictions);
-              if (sub.remaining_predictions <= 0) {
-                setShowUpgradeModal(true);
-                return;
-              }
-            }
-          } else {
-            // fallback to profile
-            const p = await apiGet("/profile/");
-            const total = Number(p.total_predictions || 0);
-            const adminFlag = !!p.is_admin;
-            setIsAdmin(adminFlag);
-            if (adminFlag) setRemainingTrials(Infinity);
-            else {
-              const rem = Math.max(0, 10 - total);
-              setRemainingTrials(rem);
-              if (rem <= 0) {
-                setShowUpgradeModal(true);
-                return;
-              }
-            }
-          }
-        } else {
-          // fallback to profile
-          const p = await apiGet("/profile/");
-          const total = Number(p.total_predictions || 0);
-          const adminFlag = !!p.is_admin;
-          setIsAdmin(adminFlag);
-          if (adminFlag) setRemainingTrials(Infinity);
-          else {
-            const rem = Math.max(0, 10 - total);
-            setRemainingTrials(rem);
-            if (rem <= 0) {
+
+          // Check admin status first
+          const adminFlag = !!sub.is_admin;
+          console.log("Admin flag in startFlow:", adminFlag); // Debug log
+          adminDetected = adminFlag;
+
+          if (adminFlag) {
+            trialsValue = Infinity;
+            console.log("Admin detected in startFlow: unlimited predictions");
+          } else if (typeof sub.remaining_predictions === "number") {
+            trialsValue = sub.remaining_predictions;
+            if (sub.remaining_predictions <= 0) {
               setShowUpgradeModal(true);
               return;
             }
           }
         }
+
+        // If admin not detected from subscription OR trials not set, check profile
+        if (!adminDetected || trialsValue === null) {
+          const p = await apiGet("/profile/");
+          const total = Number(p.total_predictions || 0);
+          const adminFlagProfile = !!p.is_admin;
+          console.log(
+            "Admin flag from profile in startFlow:",
+            adminFlagProfile
+          ); // Debug log
+
+          // Override with profile admin status if it's true
+          if (adminFlagProfile) {
+            adminDetected = true;
+            trialsValue = Infinity;
+            console.log("Admin detected from profile in startFlow: unlimited");
+          } else if (trialsValue === null) {
+            // Only set trials from profile if not already set and not admin
+            trialsValue = Math.max(0, 10 - total);
+            if (trialsValue <= 0) {
+              setShowUpgradeModal(true);
+              return;
+            }
+          }
+        }
+
+        // Set the state
+        setIsAdmin(adminDetected);
+        setRemainingTrials(trialsValue);
       } catch (err) {
         // if profile/subscription fetch fails (401 or network), redirect to login
         if (err?.response?.status === 401) {
@@ -476,7 +553,8 @@ export default function PredictPage() {
   };
 
   const resetToDefaults = () => {
-    if (defaults) setForm(normalizeFormForEdit({ ...defaults, Building_Type: "" }));
+    if (defaults)
+      setForm(normalizeFormForEdit({ ...defaults, Building_Type: "" }));
     else
       setForm(
         normalizeFormForEdit({
@@ -499,39 +577,58 @@ export default function PredictPage() {
 
   // Refresh trials by asking the subscription endpoint first, fallback to profile
   const refreshTrialsFromProfile = async () => {
+    let adminDetected = false;
+    let trialsValue = null;
+
     try {
       const sres = await apiGet("/subscription/");
       if (sres && sres.subscription) {
         const sub = sres.subscription;
-        if (typeof sub.remaining_predictions === "number") {
-          setIsAdmin(!!sub.is_admin);
-          if (sub.is_admin) setRemainingTrials(Infinity);
-          else {
-            setRemainingTrials(sub.remaining_predictions);
+
+        // Check admin status first
+        const adminFlag = !!sub.is_admin;
+        adminDetected = adminFlag;
+
+        if (adminFlag) {
+          trialsValue = Infinity;
+          console.log("Admin detected in refreshTrialsFromProfile: unlimited");
+        } else {
+          // Not admin, check remaining predictions
+          if (typeof sub.remaining_predictions === "number") {
+            trialsValue = sub.remaining_predictions;
             if (sub.remaining_predictions <= 0) setShowUpgradeModal(true);
           }
-          return;
         }
       }
     } catch {
       // ignore and fallback
     }
 
-    try {
-      const p = await apiGet("/profile/");
-      const total = Number(p.total_predictions || 0);
-      const adminFlag = !!p.is_admin;
-      setIsAdmin(adminFlag);
-      if (adminFlag) {
-        setRemainingTrials(Infinity);
-      } else {
-        const rem = Math.max(0, 10 - total);
-        setRemainingTrials(rem);
-        if (rem <= 0) setShowUpgradeModal(true);
+    // If admin not detected from subscription OR trials not set, check profile
+    if (!adminDetected || trialsValue === null) {
+      try {
+        const p = await apiGet("/profile/");
+        const adminFlag = !!p.is_admin;
+
+        // Override with profile admin status if it's true
+        if (adminFlag) {
+          adminDetected = true;
+          trialsValue = Infinity;
+          console.log("Admin detected from profile in refresh: unlimited");
+        } else if (trialsValue === null) {
+          // Only set trials from profile if not already set and not admin
+          const total = Number(p.total_predictions || 0);
+          trialsValue = Math.max(0, 10 - total);
+          if (trialsValue <= 0) setShowUpgradeModal(true);
+        }
+      } catch {
+        // ignore
       }
-    } catch {
-      // ignore
     }
+
+    // Set the state once
+    setIsAdmin(adminDetected);
+    setRemainingTrials(trialsValue);
   };
 
   const confirmAndPredict = async () => {
@@ -577,12 +674,14 @@ export default function PredictPage() {
           raw === "." ||
           raw === "-."
         ) {
-          if (ranges && ranges[k]) setForm((prev) => ({ ...prev, [k]: fmt2(ranges[k][0]) }));
+          if (ranges && ranges[k])
+            setForm((prev) => ({ ...prev, [k]: fmt2(ranges[k][0]) }));
           else setForm((prev) => ({ ...prev, [k]: "0.00" }));
         } else {
           const num = Number(raw);
           if (isNaN(num)) {
-            if (ranges && ranges[k]) setForm((prev) => ({ ...prev, [k]: fmt2(ranges[k][0]) }));
+            if (ranges && ranges[k])
+              setForm((prev) => ({ ...prev, [k]: fmt2(ranges[k][0]) }));
             else setForm((prev) => ({ ...prev, [k]: "0.00" }));
           } else {
             if (ranges && ranges[k]) {
@@ -601,6 +700,7 @@ export default function PredictPage() {
 
       // Use centralized apiPost (Authorization header handled in api.js)
       const resp = await apiPost("/predict/", payload);
+      console.log("Prediction response:", resp); // Debug log
 
       // update result and step
       setResult(resp);
@@ -608,13 +708,30 @@ export default function PredictPage() {
 
       // If backend returned remaining field, use it (preferred)
       if (resp && typeof resp.remaining === "number") {
-        setRemainingTrials(resp.remaining);
-        if (resp.remaining <= 0) setShowUpgradeModal(true);
+        console.log("Backend returned remaining:", resp.remaining); // Debug log
+
+        // IMPORTANT: Only update if user is not admin
+        if (!isAdmin) {
+          setRemainingTrials(resp.remaining);
+          if (resp.remaining <= 0) setShowUpgradeModal(true);
+        } else {
+          console.log("Admin user - ignoring backend remaining value"); // Debug log
+          // Keep Infinity for admin users
+          setRemainingTrials(Infinity);
+        }
       } else {
         // otherwise, decrement locally and refresh from subscription/profile
-        if (!isAdmin && remainingTrials !== null && remainingTrials !== Infinity) {
+        if (
+          !isAdmin &&
+          remainingTrials !== null &&
+          remainingTrials !== Infinity
+        ) {
           setRemainingTrials((prev) => {
-            const next = Math.max(0, (typeof prev === "number" ? prev : 10) - 1);
+            const next = Math.max(
+              0,
+              (typeof prev === "number" ? prev : 10) - 1
+            );
+            console.log("Decrementing remaining trials from", prev, "to", next); // Debug log
             if (next <= 0) setShowUpgradeModal(true);
             return next;
           });
@@ -624,6 +741,7 @@ export default function PredictPage() {
             refreshTrialsFromProfile();
           }, 1000);
         } else {
+          console.log("Admin or unlimited - not decrementing"); // Debug log
           // ensure we refresh to show correct server state
           setTimeout(() => {
             refreshTrialsFromProfile();
@@ -641,7 +759,10 @@ export default function PredictPage() {
       }
 
       console.error(err);
-      setError(err?.response?.data?.error || "Prediction failed. See console for details.");
+      setError(
+        err?.response?.data?.error ||
+          "Prediction failed. See console for details."
+      );
     } finally {
       setLoading(false);
     }
@@ -672,11 +793,15 @@ export default function PredictPage() {
   };
 
   const fieldRow = (label, key, stepNum, type = "text", stepValue = "0.01") => {
-    const value = form[key] !== undefined && form[key] !== null ? form[key] : "";
+    const value =
+      form[key] !== undefined && form[key] !== null ? form[key] : "";
     const unit = getUnit(key);
 
     return (
-      <div key={key} className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+      <div
+        key={key}
+        className="flex flex-col md:flex-row md:items-center md:justify-between gap-3"
+      >
         <label className="font-medium w-1/3">
           {label}
           {unit && <span className="text-gray-500"> ({unit})</span>}
@@ -695,7 +820,9 @@ export default function PredictPage() {
           {ranges && ranges[key] && (
             <p
               className={`text-xs mt-1 transition-all duration-300 ${
-                rangeError[key] ? "text-red-500 scale-110" : "text-gray-500 scale-100"
+                rangeError[key]
+                  ? "text-red-500 scale-110"
+                  : "text-gray-500 scale-100"
               }`}
             >
               Range: {ranges[key][0]} — {ranges[key][1]} {unit && unit}
@@ -713,8 +840,16 @@ export default function PredictPage() {
       const unit = getUnit(k);
       const raw = form[k];
       if (k === "Building_Type") return String(raw || "");
-      if (raw === "" || raw === null || raw === undefined || raw === "-" || raw === "." || raw === "-.") {
-        if (ranges && ranges[k]) return `${fmt2(ranges[k][0])}${unit ? " " + unit : ""}`;
+      if (
+        raw === "" ||
+        raw === null ||
+        raw === undefined ||
+        raw === "-" ||
+        raw === "." ||
+        raw === "-."
+      ) {
+        if (ranges && ranges[k])
+          return `${fmt2(ranges[k][0])}${unit ? " " + unit : ""}`;
         return `0.00${unit ? " " + unit : ""}`;
       }
       return `${String(raw)}${unit ? " " + unit : ""}`;
@@ -727,23 +862,61 @@ export default function PredictPage() {
     };
 
     return (
-      <div id="pdf-content" className="p-2 bg-white border border-gray-300 rounded-lg shadow-xl w-full max-w-4xl mx-auto" style={{ fontSize: "11pt" }}>
-        <h1 className="text-xl font-bold text-center text-blue-700 mb-4 pb-2" style={{ fontSize: "16pt" }}>
+      <div
+        id="pdf-content"
+        className="p-2 bg-white border border-gray-300 rounded-lg shadow-xl w-full max-w-4xl mx-auto"
+        style={{ fontSize: "11pt" }}
+      >
+        <h1
+          className="text-xl font-bold text-center text-blue-700 mb-4 pb-2"
+          style={{ fontSize: "16pt" }}
+        >
           Energy Prediction Report
         </h1>
 
         <div className="mb-6">
-          <h2 className="text-lg font-semibold mb-3 text-gray-800 flex items-center gap-2" style={{ fontSize: "14pt" }}>
+          <h2
+            className="text-lg font-semibold mb-3 text-gray-800 flex items-center gap-2"
+            style={{ fontSize: "14pt" }}
+          >
             User Inputs (Prediction Parameters)
           </h2>
 
-          <table className="w-full border-collapse text-xs" style={{ fontSize: "10pt" }}>
+          <table
+            className="w-full border-collapse text-xs"
+            style={{ fontSize: "10pt" }}
+          >
             <thead>
               <tr className="bg-gray-100">
-                <th style={{ border: "1px solid #e5e7eb", padding: "5px 8px", textAlign: "center", verticalAlign: "middle" }}>Field</th>
-                <th style={{ border: "1px solid #e5e7eb", padding: "5px 8px", textAlign: "center", verticalAlign: "middle" }}>Value</th>
+                <th
+                  style={{
+                    border: "1px solid #e5e7eb",
+                    padding: "5px 8px",
+                    textAlign: "center",
+                    verticalAlign: "middle",
+                  }}
+                >
+                  Field
+                </th>
+                <th
+                  style={{
+                    border: "1px solid #e5e7eb",
+                    padding: "5px 8px",
+                    textAlign: "center",
+                    verticalAlign: "middle",
+                  }}
+                >
+                  Value
+                </th>
                 {hasRanges && (
-                  <th style={{ border: "1px solid #e5e7eb", padding: "7px 8px", textAlign: "center", verticalAlign: "middle" }}>
+                  <th
+                    style={{
+                      border: "1px solid #e5e7eb",
+                      padding: "7px 8px",
+                      textAlign: "center",
+                      verticalAlign: "middle",
+                    }}
+                  >
                     Range
                   </th>
                 )}
@@ -752,7 +925,10 @@ export default function PredictPage() {
 
             <tbody>
               {Object.keys(form).map((key, index) => {
-                const displayLabel = key === "Domestic_Hot_Water_Usage" ? "Daily Hot Water Usage" : key.replace(/_/g, " ");
+                const displayLabel =
+                  key === "Domestic_Hot_Water_Usage"
+                    ? "Daily Hot Water Usage"
+                    : key.replace(/_/g, " ");
                 return (
                   <tr
                     key={key}
@@ -760,17 +936,43 @@ export default function PredictPage() {
                       backgroundColor: index % 2 === 0 ? "#f9f9f9" : "#ffffff",
                     }}
                   >
-                    <td style={{ border: "1px solid #e5e7eb", padding: "7px 8px", textTransform: "capitalize", fontWeight: "500", verticalAlign: "middle", width: hasRanges ? "35%" : "50%" }}>
+                    <td
+                      style={{
+                        border: "1px solid #e5e7eb",
+                        padding: "7px 8px",
+                        textTransform: "capitalize",
+                        fontWeight: "500",
+                        verticalAlign: "middle",
+                        width: hasRanges ? "35%" : "50%",
+                      }}
+                    >
                       {displayLabel}
                       {getUnit(key) && <span> ({getUnit(key)})</span>}
                     </td>
 
-                    <td style={{ border: "1px solid #e5e7eb", padding: "5px 8px", verticalAlign: "middle", textAlign: "center", width: hasRanges ? "30%" : "50%" }}>
+                    <td
+                      style={{
+                        border: "1px solid #e5e7eb",
+                        padding: "5px 8px",
+                        verticalAlign: "middle",
+                        textAlign: "center",
+                        width: hasRanges ? "30%" : "50%",
+                      }}
+                    >
                       <span>{pdfValueWithUnit(key)}</span>
                     </td>
 
                     {hasRanges && (
-                      <td style={{ border: "1px solid #e5e7eb", padding: "5px 8px", color: "#6b7280", verticalAlign: "middle", textAlign: "center", width: "35%" }}>
+                      <td
+                        style={{
+                          border: "1px solid #e5e7eb",
+                          padding: "5px 8px",
+                          color: "#6b7280",
+                          verticalAlign: "middle",
+                          textAlign: "center",
+                          width: "35%",
+                        }}
+                      >
                         {pdfRangeWithUnit(key)}
                       </td>
                     )}
@@ -783,50 +985,167 @@ export default function PredictPage() {
 
         {result && (
           <div className="mt-6 pt-4 border-t border-gray-300">
-            <h2 className="text-lg font-semibold mb-3 text-gray-800 flex items-center gap-2" style={{ fontSize: "14pt" }}>
+            <h2
+              className="text-lg font-semibold mb-3 text-gray-800 flex items-center gap-2"
+              style={{ fontSize: "14pt" }}
+            >
               Prediction Results
             </h2>
 
             <div className="flex items-center gap-3 mb-3">
               <p className="font-bold text-sm">Performance Category:</p>
-              <span style={{ fontWeight: "bold", paddingTop: "0px", paddingBottom: "10px", paddingLeft: "3px", paddingRight: "3px", borderRadius: "4px", display: "inline-block", fontSize: "10pt", textAlign: "center" }}>
+              <span
+                style={{
+                  fontWeight: "bold",
+                  paddingTop: "0px",
+                  paddingBottom: "10px",
+                  paddingLeft: "3px",
+                  paddingRight: "3px",
+                  borderRadius: "4px",
+                  display: "inline-block",
+                  fontSize: "10pt",
+                  textAlign: "center",
+                }}
+              >
                 {result.performance_category}
               </span>
             </div>
 
             <div className="mt-3 space-y-3">
-              <h3 className="font-semibold text-base text-gray-800 mb-2" style={{ fontSize: "12pt" }}>
+              <h3
+                className="font-semibold text-base text-gray-800 mb-2"
+                style={{ fontSize: "12pt" }}
+              >
                 Energy Metrics
               </h3>
 
-              <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                  <span style={{ width: "100px", fontWeight: "bold", fontSize: "10pt" }}>Total Energy:</span>
-                  <div style={{ flexGrow: 1, backgroundColor: "#e0f2ff", height: "18px", borderRadius: "4px", overflow: "hidden", minWidth: "100px" }}>
-                    <div style={{ height: "100%", width: `${Math.min((result.total_energy_month_kwh / 3000) * 100, 100)}%`, backgroundColor: "#1d4ed8" }} />
+              <div
+                style={{ display: "flex", flexDirection: "column", gap: "5px" }}
+              >
+                <div
+                  style={{ display: "flex", alignItems: "center", gap: "10px" }}
+                >
+                  <span
+                    style={{
+                      width: "100px",
+                      fontWeight: "bold",
+                      fontSize: "10pt",
+                    }}
+                  >
+                    Total Energy:
+                  </span>
+                  <div
+                    style={{
+                      flexGrow: 1,
+                      backgroundColor: "#e0f2ff",
+                      height: "18px",
+                      borderRadius: "4px",
+                      overflow: "hidden",
+                      minWidth: "100px",
+                    }}
+                  >
+                    <div
+                      style={{
+                        height: "100%",
+                        width: `${Math.min(
+                          (result.total_energy_month_kwh / 3000) * 100,
+                          100
+                        )}%`,
+                        backgroundColor: "#1d4ed8",
+                      }}
+                    />
                   </div>
-                  <span style={{ width: "80px", textAlign: "right", fontWeight: "bold", fontSize: "10pt" }}>{result.total_energy_month_kwh} kWh</span>
+                  <span
+                    style={{
+                      width: "80px",
+                      textAlign: "right",
+                      fontWeight: "bold",
+                      fontSize: "10pt",
+                    }}
+                  >
+                    {result.total_energy_month_kwh} kWh
+                  </span>
                 </div>
               </div>
 
-              <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                  <span style={{ width: "100px", fontWeight: "bold", fontSize: "10pt" }}>Monthly EUI:</span>
-                  <div style={{ flexGrow: 1, backgroundColor: "#e9f8e9", height: "18px", borderRadius: "4px", overflow: "hidden", minWidth: "100px" }}>
-                    <div style={{ height: "100%", width: `${Math.min((result.eui_month_kwh_m2 / 40) * 100, 100)}%`, backgroundColor: "#15803d" }} />
+              <div
+                style={{ display: "flex", flexDirection: "column", gap: "5px" }}
+              >
+                <div
+                  style={{ display: "flex", alignItems: "center", gap: "10px" }}
+                >
+                  <span
+                    style={{
+                      width: "100px",
+                      fontWeight: "bold",
+                      fontSize: "10pt",
+                    }}
+                  >
+                    Monthly EUI:
+                  </span>
+                  <div
+                    style={{
+                      flexGrow: 1,
+                      backgroundColor: "#e9f8e9",
+                      height: "18px",
+                      borderRadius: "4px",
+                      overflow: "hidden",
+                      minWidth: "100px",
+                    }}
+                  >
+                    <div
+                      style={{
+                        height: "100%",
+                        width: `${Math.min(
+                          (result.eui_month_kwh_m2 / 40) * 100,
+                          100
+                        )}%`,
+                        backgroundColor: "#15803d",
+                      }}
+                    />
                   </div>
-                  <span style={{ width: "80px", textAlign: "right", fontWeight: "bold", fontSize: "10pt" }}>{result.eui_month_kwh_m2} kWh/m²</span>
+                  <span
+                    style={{
+                      width: "80px",
+                      textAlign: "right",
+                      fontWeight: "bold",
+                      fontSize: "10pt",
+                    }}
+                  >
+                    {result.eui_month_kwh_m2} kWh/m²
+                  </span>
                 </div>
               </div>
             </div>
 
             <div className="mt-4">
-              <h3 className="font-semibold text-base text-gray-700 mb-2" style={{ fontSize: "12pt" }}>Impacting Factors</h3>
+              <h3
+                className="font-semibold text-base text-gray-700 mb-2"
+                style={{ fontSize: "12pt" }}
+              >
+                Impacting Factors
+              </h3>
               <ul style={{ listStyle: "none", padding: 0 }}>
                 {result.impacting_factors?.length ? (
                   result.impacting_factors.map((f, i) => (
-                    <li key={`${String(f)}-${i}`} style={{ display: "flex", alignItems: "center", marginBottom: "4px", fontSize: "10pt" }}>
-                      <span style={{ width: "6px", height: "6px", borderRadius: "50%", backgroundColor: "#10b981", marginRight: "6px" }} />
+                    <li
+                      key={`${String(f)}-${i}`}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        marginBottom: "4px",
+                        fontSize: "10pt",
+                      }}
+                    >
+                      <span
+                        style={{
+                          width: "6px",
+                          height: "6px",
+                          borderRadius: "50%",
+                          backgroundColor: "#10b981",
+                          marginRight: "6px",
+                        }}
+                      />
                       {f}
                     </li>
                   ))
@@ -837,74 +1156,123 @@ export default function PredictPage() {
             </div>
 
             <div className="mt-4">
-              <h3 className="font-semibold text-base text-gray-700 mb-2" style={{ fontSize: "12pt" }}>Recommendations</h3>
+              <h3
+                className="font-semibold text-base text-gray-700 mb-2"
+                style={{ fontSize: "12pt" }}
+              >
+                Recommendations
+              </h3>
               <ul style={{ listStyle: "none", padding: 0 }}>
                 {result.recommendations?.length ? (
                   result.recommendations.map((r, i) => (
-                    <li key={`rec-${i}`} style={{ display: "flex", alignItems: "flex-start", marginBottom: "4px", fontSize: "10pt" }}>
-                      <span style={{ color: "#3b82f6", fontSize: "1em", marginRight: "6px" }}>💡</span>
+                    <li
+                      key={`rec-${i}`}
+                      style={{
+                        display: "flex",
+                        alignItems: "flex-start",
+                        marginBottom: "4px",
+                        fontSize: "10pt",
+                      }}
+                    >
+                      <span
+                        style={{
+                          color: "#3b82f6",
+                          fontSize: "1em",
+                          marginRight: "6px",
+                        }}
+                      >
+                        💡
+                      </span>
                       {r}
                     </li>
                   ))
                 ) : (
-                  <li style={{ fontSize: "10pt" }}>No improvements recommended.</li>
+                  <li style={{ fontSize: "10pt" }}>
+                    No improvements recommended.
+                  </li>
                 )}
               </ul>
             </div>
             {/* ===================== OPTIMIZED PERFORMANCE (PDF SECTION) ===================== */}
-{result.optimized_energy_month_kwh !== null && (
-  <div className="mt-6" style={{ fontSize: "11pt" }}>
-    <h3 className="font-semibold mb-2 text-gray-800" style={{ fontSize: "12pt" }}>
-      Expected Performance After Improvements
-    </h3>
+            {result.optimized_energy_month_kwh !== null && (
+              <div className="mt-6" style={{ fontSize: "11pt" }}>
+                <h3
+                  className="font-semibold mb-2 text-gray-800"
+                  style={{ fontSize: "12pt" }}
+                >
+                  Expected Performance After Improvements
+                </h3>
 
-    <table className="w-full border-collapse text-xs" style={{ fontSize: "10pt" }}>
-      <tbody>
-        <tr>
-          <td style={{ border: "1px solid #e5e7eb", padding: "6px" }}>
-            Optimized Monthly Energy
-          </td>
-          <td style={{ border: "1px solid #e5e7eb", padding: "6px" }}>
-            {result.optimized_energy_month_kwh} kWh
-          </td>
-        </tr>
+                <table
+                  className="w-full border-collapse text-xs"
+                  style={{ fontSize: "10pt" }}
+                >
+                  <tbody>
+                    <tr>
+                      <td
+                        style={{ border: "1px solid #e5e7eb", padding: "6px" }}
+                      >
+                        Optimized Monthly Energy
+                      </td>
+                      <td
+                        style={{ border: "1px solid #e5e7eb", padding: "6px" }}
+                      >
+                        {result.optimized_energy_month_kwh} kWh
+                      </td>
+                    </tr>
 
-        <tr>
-          <td style={{ border: "1px solid #e5e7eb", padding: "6px" }}>
-            Energy Savings
-          </td>
-          <td style={{ border: "1px solid #e5e7eb", padding: "6px" }}>
-            {result.energy_savings_kwh} kWh ({result.energy_savings_percent}%)
-          </td>
-        </tr>
+                    <tr>
+                      <td
+                        style={{ border: "1px solid #e5e7eb", padding: "6px" }}
+                      >
+                        Energy Savings
+                      </td>
+                      <td
+                        style={{ border: "1px solid #e5e7eb", padding: "6px" }}
+                      >
+                        {result.energy_savings_kwh} kWh (
+                        {result.energy_savings_percent}%)
+                      </td>
+                    </tr>
 
-        <tr>
-          <td style={{ border: "1px solid #e5e7eb", padding: "6px" }}>
-            Optimized EUI
-          </td>
-          <td style={{ border: "1px solid #e5e7eb", padding: "6px" }}>
-            {result.optimized_eui_kwh_m2} kWh/m²
-          </td>
-        </tr>
+                    <tr>
+                      <td
+                        style={{ border: "1px solid #e5e7eb", padding: "6px" }}
+                      >
+                        Optimized EUI
+                      </td>
+                      <td
+                        style={{ border: "1px solid #e5e7eb", padding: "6px" }}
+                      >
+                        {result.optimized_eui_kwh_m2} kWh/m²
+                      </td>
+                    </tr>
 
-        <tr>
-          <td style={{ border: "1px solid #e5e7eb", padding: "6px" }}>
-            Expected Category
-          </td>
-          <td style={{ border: "1px solid #e5e7eb", padding: "6px" }}>
-            {result.optimized_category}
-          </td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
-)}
-
+                    <tr>
+                      <td
+                        style={{ border: "1px solid #e5e7eb", padding: "6px" }}
+                      >
+                        Expected Category
+                      </td>
+                      <td
+                        style={{ border: "1px solid #e5e7eb", padding: "6px" }}
+                      >
+                        {result.optimized_category}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
 
-        <div className="text-center text-xs text-gray-500 mt-6 pt-3 border-t" style={{ fontSize: "9pt" }}>
-          Report Generated: {new Date().toLocaleDateString()} at {new Date().toLocaleTimeString()}
+        <div
+          className="text-center text-xs text-gray-500 mt-6 pt-3 border-t"
+          style={{ fontSize: "9pt" }}
+        >
+          Report Generated: {new Date().toLocaleDateString()} at{" "}
+          {new Date().toLocaleTimeString()}
         </div>
       </div>
     );
@@ -930,21 +1298,31 @@ export default function PredictPage() {
           proposed === "." ||
           proposed === "-."
         ) {
-          if (ranges && ranges[key]) setForm((prev) => ({ ...prev, [key]: fmt2(ranges[key][0]) }));
+          if (ranges && ranges[key])
+            setForm((prev) => ({ ...prev, [key]: fmt2(ranges[key][0]) }));
           else setForm((prev) => ({ ...prev, [key]: "0.00" }));
         } else {
           const num = Number(proposed);
           if (isNaN(num)) {
-            if (ranges && ranges[key]) setForm((prev) => ({ ...prev, [key]: fmt2(ranges[key][0]) }));
+            if (ranges && ranges[key])
+              setForm((prev) => ({ ...prev, [key]: fmt2(ranges[key][0]) }));
             else setForm((prev) => ({ ...prev, [key]: "0.00" }));
           } else {
             if (ranges && ranges[key]) {
               const [min, max] = ranges[key];
               if (num < min || num > max) {
-                alert(`Value for ${key.replace(/_/g, " ")} must be between ${min} and ${max}.`);
+                alert(
+                  `Value for ${key.replace(
+                    /_/g,
+                    " "
+                  )} must be between ${min} and ${max}.`
+                );
                 return;
               }
-              setForm((prev) => ({ ...prev, [key]: fmt2(num < min ? min : num > max ? max : num) }));
+              setForm((prev) => ({
+                ...prev,
+                [key]: fmt2(num < min ? min : num > max ? max : num),
+              }));
             } else {
               setForm((prev) => ({ ...prev, [key]: fmt2(num) }));
             }
@@ -982,21 +1360,41 @@ export default function PredictPage() {
 
     return (
       <div className="bg-white p-6 rounded-lg shadow">
-        <h3 className="text-xl font-bold mb-4">Confirm values before predicting</h3>
+        <h3 className="text-xl font-bold mb-4">
+          Confirm values before predicting
+        </h3>
         <div className="overflow-x-auto">
           <table className="w-full border-collapse min-w-max">
             <thead>
               <tr className="bg-gray-100">
-                <th className="border px-3 py-2 text-left" style={{ width: "40%" }}>Field</th>
-                <th className="border px-3 py-2 text-left" style={{ width: "40%" }}>Value</th>
-                <th className="border px-3 py-2 text-center" style={{ width: "20%" }}>Actions</th>
+                <th
+                  className="border px-3 py-2 text-left"
+                  style={{ width: "40%" }}
+                >
+                  Field
+                </th>
+                <th
+                  className="border px-3 py-2 text-left"
+                  style={{ width: "40%" }}
+                >
+                  Value
+                </th>
+                <th
+                  className="border px-3 py-2 text-center"
+                  style={{ width: "20%" }}
+                >
+                  Actions
+                </th>
               </tr>
             </thead>
 
             <tbody>
               {Object.keys(form).map((key) => {
                 const unit = getUnit(key);
-                const displayLabel = key === "Domestic_Hot_Water_Usage" ? "Daily Hot Water Usage" : key.replace(/_/g, " ");
+                const displayLabel =
+                  key === "Domestic_Hot_Water_Usage"
+                    ? "Daily Hot Water Usage"
+                    : key.replace(/_/g, " ");
                 return (
                   <tr key={`summary-${key}`}>
                     <td className="border px-3 py-2 capitalize">
@@ -1009,7 +1407,12 @@ export default function PredictPage() {
                         key === "Building_Type" ? (
                           <select
                             value={editValues[key]}
-                            onChange={(e) => setEditValues((prev) => ({ ...prev, [key]: e.target.value }))}
+                            onChange={(e) =>
+                              setEditValues((prev) => ({
+                                ...prev,
+                                [key]: e.target.value,
+                              }))
+                            }
                             className="border px-2 py-1 rounded w-full"
                           >
                             <option value="">Select building type</option>
@@ -1021,23 +1424,58 @@ export default function PredictPage() {
                           </select>
                         ) : (
                           <div>
-                            <input type="text" step="0.01" value={editValues[key]} onChange={(e) => setEditValues((prev) => ({ ...prev, [key]: e.target.value }))} className="border px-2 py-1 rounded w-full" />
-                            {ranges && ranges[key] && <div className="text-xs text-gray-500 mt-1">Range: {ranges[key][0]} — {ranges[key][1]} {unit && unit}</div>}
+                            <input
+                              type="text"
+                              step="0.01"
+                              value={editValues[key]}
+                              onChange={(e) =>
+                                setEditValues((prev) => ({
+                                  ...prev,
+                                  [key]: e.target.value,
+                                }))
+                              }
+                              className="border px-2 py-1 rounded w-full"
+                            />
+                            {ranges && ranges[key] && (
+                              <div className="text-xs text-gray-500 mt-1">
+                                Range: {ranges[key][0]} — {ranges[key][1]}{" "}
+                                {unit && unit}
+                              </div>
+                            )}
                           </div>
                         )
                       ) : (
-                        <span>{key === "Building_Type" ? String(form[key]) : `${String(form[key])}${unit ? " " + unit : ""}`}</span>
+                        <span>
+                          {key === "Building_Type"
+                            ? String(form[key])
+                            : `${String(form[key])}${unit ? " " + unit : ""}`}
+                        </span>
                       )}
                     </td>
 
                     <td className="border px-3 py-2 text-center">
                       {editValues[key] !== undefined ? (
                         <div className="flex justify-center gap-2">
-                          <button onClick={() => handleSave(key)} className="px-3 py-1 bg-green-600 text-white rounded">Save</button>
-                          <button onClick={() => handleUndo(key)} className="px-3 py-1 bg-yellow-500 text-white rounded">Undo</button>
+                          <button
+                            onClick={() => handleSave(key)}
+                            className="px-3 py-1 bg-green-600 text-white rounded"
+                          >
+                            Save
+                          </button>
+                          <button
+                            onClick={() => handleUndo(key)}
+                            className="px-3 py-1 bg-yellow-500 text-white rounded"
+                          >
+                            Undo
+                          </button>
                         </div>
                       ) : (
-                        <button onClick={() => handleEdit(key)} className="px-3 py-1 bg-blue-600 text-white rounded">Edit</button>
+                        <button
+                          onClick={() => handleEdit(key)}
+                          className="px-3 py-1 bg-blue-600 text-white rounded"
+                        >
+                          Edit
+                        </button>
                       )}
                     </td>
                   </tr>
@@ -1048,24 +1486,22 @@ export default function PredictPage() {
         </div>
 
         <div className="flex gap-3 mt-6">
-          <button onClick={goBack} className="px-4 py-2 border rounded">Back</button>
-          <button onClick={confirmAndPredict} className="bg-blue-600 text-white px-4 py-2 rounded" disabled={loading}>
+          <button onClick={goBack} className="px-4 py-2 border rounded">
+            Back
+          </button>
+          <button
+            onClick={confirmAndPredict}
+            className="bg-blue-600 text-white px-4 py-2 rounded"
+            disabled={loading}
+          >
             {loading ? "Predicting..." : "Confirm & Predict"}
           </button>
         </div>
         {error && <div className="text-red-600 mt-3">{error}</div>}
 
-        {/* Trial info */}
+        {/* Trial info - Using helper function */}
         <div className="mt-3 text-sm text-gray-600">
-          {isAdmin ? (
-            <div>Admin: unlimited predictions.</div>
-          ) : remainingTrials === null ? (
-            <div>Free trial remaining: checking...</div>
-          ) : remainingTrials === Infinity ? (
-            <div>Unlimited predictions.</div>
-          ) : (
-            <div>Free trial remaining: <strong>{remainingTrials}</strong></div>
-          )}
+          {getTrialText(isAdmin, remainingTrials)}
         </div>
       </div>
     );
@@ -1078,7 +1514,10 @@ export default function PredictPage() {
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
         <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
           <h3 className="text-xl font-bold mb-3">Free Trial Expired</h3>
-          <p className="mb-4">You have used your free predictions. To continue using the prediction model, please upgrade to a paid plan.</p>
+          <p className="mb-4">
+            You have used your free predictions. To continue using the
+            prediction model, please upgrade to a paid plan.
+          </p>
 
           <div className="flex gap-3">
             <button
@@ -1106,28 +1545,52 @@ export default function PredictPage() {
   };
   // ------------------------------------------------------------
 
+  // Debug function
+  // const debugAdminState = () => {
+  //   console.log("Debug Admin State:", {
+  //     isAdmin,
+  //     remainingTrials,
+  //     token: localStorage.getItem("token"),
+  //     step
+  //   });
+  // };
+
   return (
-    <div ref={formRef} className="min-h-screen bg-[#fcf5ee] flex justify-center items-start px-4 pt-28 pb-10">
+    <div
+      ref={formRef}
+      className="min-h-screen bg-[#fcf5ee] flex justify-center items-start px-4 pt-28 pb-10"
+    >
       <div className="w-full max-w-7xl grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
         <div className="w-full my-auto">
           <div className="bg-blue-50 p-6 rounded-lg shadow w-full">
-            <h1 className="text-2xl font-bold mb-4 text-center">Energy Efficiency — Predict</h1>
+            <h1 className="text-2xl font-bold mb-4 text-center">
+              Energy Efficiency — Predict
+            </h1>
 
             {step === 0 && (
               <div className="text-center">
-                <p className="mb-6">Click Start to start entering building information (defaults prefilled).</p>
-                <button onClick={startFlow} className="bg-blue-600 text-white px-6 py-3 rounded">Start</button>
-                {/* show small hint about trials */}
+                <p className="mb-6">
+                  Click Start to start entering building information (defaults
+                  prefilled).
+                </p>
+                <button
+                  onClick={startFlow}
+                  className="bg-blue-600 text-white px-6 py-3 rounded"
+                >
+                  Start
+                </button>
+
+                {/* Debug button */}
+                {/* <button 
+                  onClick={debugAdminState}
+                  className="mt-2 text-xs text-gray-500 underline"
+                >
+                  Debug State
+                </button> */}
+
+                {/* show small hint about trials - Using helper function */}
                 <div className="text-sm text-gray-600 mt-3">
-                  {isAdmin ? (
-                    <span>Admin: unlimited predictions.</span>
-                  ) : remainingTrials === null ? (
-                    <span>Free trial: predictions (login to track usage).</span>
-                  ) : remainingTrials === Infinity ? (
-                    <span>Unlimited predictions.</span>
-                  ) : (
-                    <span>Free predictions remaining: <strong>{remainingTrials}</strong></span>
-                  )}
+                  {getTrialTextHTML(isAdmin, remainingTrials)}
                 </div>
               </div>
             )}
@@ -1136,7 +1599,11 @@ export default function PredictPage() {
               <div className="space-y-4 dropdown-wrapper">
                 <label className="block font-semibold">Building Type</label>
                 <div className="relative">
-                  <button type="button" onClick={() => setOpen((o) => !o)} className="w-full p-2 border rounded flex justify-between items-center">
+                  <button
+                    type="button"
+                    onClick={() => setOpen((o) => !o)}
+                    className="w-full p-2 border rounded flex justify-between items-center"
+                  >
                     {form.Building_Type || "Select building type"}
                     <span>▼</span>
                   </button>
@@ -1159,8 +1626,20 @@ export default function PredictPage() {
                   )}
                 </div>
                 <div className="flex gap-3 mt-3">
-                  <button type="button" onClick={() => setStep(0)} className="px-4 py-2 rounded border">Cancel</button>
-                  <button type="button" onClick={goNext} className="bg-green-600 text-white px-4 py-2 rounded">Next</button>
+                  <button
+                    type="button"
+                    onClick={() => setStep(0)}
+                    className="px-4 py-2 rounded border"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={goNext}
+                    className="bg-green-600 text-white px-4 py-2 rounded"
+                  >
+                    Next
+                  </button>
                 </div>
                 {error && <div className="text-red-600">{error}</div>}
               </div>
@@ -1168,22 +1647,51 @@ export default function PredictPage() {
 
             {step === 2 && (
               <form className="bg-white/70 backdrop-blur p-8 rounded-2xl shadow-lg mt-6 mb-6 border border-gray-200 animate-fadeIn">
-                <h3 className="text-xl font-semibold mb-6 text-gray-800">Envelope Properties</h3>
-                <div className="space-y-5">{envelopeFields.map((f) => fieldRow(f.replace(/_/g, " "), f, 2, "text", "0.01"))}</div>
+                <h3 className="text-xl font-semibold mb-6 text-gray-800">
+                  Envelope Properties
+                </h3>
+                <div className="space-y-5">
+                  {envelopeFields.map((f) =>
+                    fieldRow(f.replace(/_/g, " "), f, 2, "text", "0.01")
+                  )}
+                </div>
                 <div className="flex gap-3 mt-8">
-                  <button type="button" onClick={goBack} className="px-5 py-2 rounded-lg border hover:bg-gray-100 transition">Back</button>
-                  <button type="button" onClick={goNext} className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 transition shadow-sm">Next</button>
+                  <button
+                    type="button"
+                    onClick={goBack}
+                    className="px-5 py-2 rounded-lg border hover:bg-gray-100 transition"
+                  >
+                    Back
+                  </button>
+                  <button
+                    type="button"
+                    onClick={goNext}
+                    className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 transition shadow-sm"
+                  >
+                    Next
+                  </button>
                 </div>
               </form>
             )}
 
             {step === 3 && (
               <div className="mt-4">
-                <h3 className="text-lg font-semibold mb-3">Heat, Ventilation & AC</h3>
-                {hvacFields.map((f) => fieldRow(f.replace(/_/g, " "), f, 3, "text", "0.01"))}
+                <h3 className="text-lg font-semibold mb-3">
+                  Heat, Ventilation & AC
+                </h3>
+                {hvacFields.map((f) =>
+                  fieldRow(f.replace(/_/g, " "), f, 3, "text", "0.01")
+                )}
                 <div className="flex gap-3 mt-4">
-                  <button onClick={goBack} className="px-4 py-2 rounded border">Back</button>
-                  <button onClick={goNext} className="bg-green-600 text-white px-4 py-2 rounded">Next</button>
+                  <button onClick={goBack} className="px-4 py-2 rounded border">
+                    Back
+                  </button>
+                  <button
+                    onClick={goNext}
+                    className="bg-green-600 text-white px-4 py-2 rounded"
+                  >
+                    Next
+                  </button>
                 </div>
               </div>
             )}
@@ -1193,23 +1701,42 @@ export default function PredictPage() {
                 <h3 className="text-lg font-semibold mb-3">Internal Loads</h3>
                 {internalFields.map((f) => {
                   let label = f.replace(/_/g, " ");
-                  if (f === "Domestic_Hot_Water_Usage") label = "Daily Hot Water Usage";
+                  if (f === "Domestic_Hot_Water_Usage")
+                    label = "Daily Hot Water Usage";
                   return fieldRow(label, f, 4, "text", "0.01");
                 })}
                 <div className="flex gap-3 mt-4">
-                  <button onClick={goBack} className="px-4 py-2 rounded border">Back</button>
-                  <button onClick={goNext} className="bg-green-600 text-white px-4 py-2 rounded">Next</button>
+                  <button onClick={goBack} className="px-4 py-2 rounded border">
+                    Back
+                  </button>
+                  <button
+                    onClick={goNext}
+                    className="bg-green-600 text-white px-4 py-2 rounded"
+                  >
+                    Next
+                  </button>
                 </div>
               </div>
             )}
 
             {step === 5 && (
               <div className="mt-4">
-                <h3 className="text-lg font-semibold mb-3">Building Geometry</h3>
-                {geometryFields.map((f) => fieldRow(f.replace(/_/g, " "), f, 5, "text", "0.01"))}
+                <h3 className="text-lg font-semibold mb-3">
+                  Building Geometry
+                </h3>
+                {geometryFields.map((f) =>
+                  fieldRow(f.replace(/_/g, " "), f, 5, "text", "0.01")
+                )}
                 <div className="flex gap-3 mt-4">
-                  <button onClick={goBack} className="px-4 py-2 rounded border">Back</button>
-                  <button onClick={() => setStep(6)} className="bg-blue-600 text-white px-4 py-2 rounded">Review & Confirm</button>
+                  <button onClick={goBack} className="px-4 py-2 rounded border">
+                    Back
+                  </button>
+                  <button
+                    onClick={() => setStep(6)}
+                    className="bg-blue-600 text-white px-4 py-2 rounded"
+                  >
+                    Review & Confirm
+                  </button>
                 </div>
               </div>
             )}
@@ -1218,99 +1745,208 @@ export default function PredictPage() {
 
             {step === 7 && result && (
               <div className="mt-6 p-6 bg-white rounded-lg shadow space-y-6">
-                <div style={{ position: "absolute", left: "-9999px", top: "0", width: "100%", height: "100%" }}>
+                <div
+                  style={{
+                    position: "absolute",
+                    left: "-9999px",
+                    top: "0",
+                    width: "100%",
+                    height: "100%",
+                  }}
+                >
                   <PrintableReport />
                 </div>
 
                 <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
                   Results
-                  <span>{result.performance_category === "Excellent" && "🌟"}{result.performance_category === "Moderate" && "⚡"}{result.performance_category === "Poor" && "🔥"}</span>
+                  <span>
+                    {result.performance_category === "Excellent" && "🌟"}
+                    {result.performance_category === "Moderate" && "⚡"}
+                    {result.performance_category === "Poor" && "🔥"}
+                  </span>
                 </h2>
 
                 <div className="flex items-center gap-3 mt-2">
-                  <p className={`font-bold px-3 py-1 rounded inline-block ${result.performance_category === "Excellent" ? "bg-green-100 text-green-800" : result.performance_category === "Moderate" ? "bg-yellow-100 text-yellow-800" : "bg-red-100 text-red-800"}`}>
+                  <p
+                    className={`font-bold px-3 py-1 rounded inline-block ${
+                      result.performance_category === "Excellent"
+                        ? "bg-green-100 text-green-800"
+                        : result.performance_category === "Moderate"
+                        ? "bg-yellow-100 text-yellow-800"
+                        : "bg-red-100 text-red-800"
+                    }`}
+                  >
                     {result.performance_category}
                   </p>
-                  <img src={result.performance_category === "Excellent" ? "/assets/excellent.gif" : result.performance_category === "Moderate" ? "/assets/moderate.gif" : "/assets/poor.gif"} alt="Performance Icon" className="w-20 h-30" />
+                  <img
+                    src={
+                      result.performance_category === "Excellent"
+                        ? "/assets/excellent.gif"
+                        : result.performance_category === "Moderate"
+                        ? "/assets/moderate.gif"
+                        : "/assets/poor.gif"
+                    }
+                    alt="Performance Icon"
+                    className="w-20 h-30"
+                  />
                 </div>
 
                 {/* energy metrics, factors, recommendations rendered identically to earlier PrintableReport but inline */}
                 <div className="mt-4 space-y-3">
-                  <h3 className="font-semibold text-gray-700">Energy Metrics</h3>
+                  <h3 className="font-semibold text-gray-700">
+                    Energy Metrics
+                  </h3>
                   {["Total Energy", "Monthly EUI"].map((label, idx) => {
-                    const value = label === "Total Energy" ? result.total_energy_month_kwh : result.eui_month_kwh_m2;
+                    const value =
+                      label === "Total Energy"
+                        ? result.total_energy_month_kwh
+                        : result.eui_month_kwh_m2;
                     const max = label === "Total Energy" ? 3000 : 50;
-                    const colorConfig = label === "Total Energy" ? { bg: "#bfdbfe", progress: "#2563eb" } : { bg: "#dcfce7", progress: "#16a34a" };
+                    const colorConfig =
+                      label === "Total Energy"
+                        ? { bg: "#bfdbfe", progress: "#2563eb" }
+                        : { bg: "#dcfce7", progress: "#16a34a" };
                     return (
-                      <div key={`metric-${idx}`} className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+                      <div
+                        key={`metric-${idx}`}
+                        className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3"
+                      >
                         <span className="w-32">{label}:</span>
-                        <div className="h-4 rounded flex-1 overflow-hidden" style={{ backgroundColor: colorConfig.bg }}>
-                          <div className="h-4 rounded transition-all duration-500" style={{ width: `${Math.min((value / max) * 100, 100)}%`, backgroundColor: colorConfig.progress }} />
+                        <div
+                          className="h-4 rounded flex-1 overflow-hidden"
+                          style={{ backgroundColor: colorConfig.bg }}
+                        >
+                          <div
+                            className="h-4 rounded transition-all duration-500"
+                            style={{
+                              width: `${Math.min((value / max) * 100, 100)}%`,
+                              backgroundColor: colorConfig.progress,
+                            }}
+                          />
                         </div>
-                        <span>{value}{label === "Total Energy" ? " kWh" : " kWh/m²"}</span>
+                        <span>
+                          {value}
+                          {label === "Total Energy" ? " kWh" : " kWh/m²"}
+                        </span>
                       </div>
                     );
                   })}
                 </div>
 
                 <div className="mt-4">
-                  <h3 className="font-semibold text-gray-700 mb-2">Impacting Factors</h3>
+                  <h3 className="font-semibold text-gray-700 mb-2">
+                    Impacting Factors
+                  </h3>
                   <div className="flex flex-wrap gap-3">
                     {result.impacting_factors?.length ? (
                       result.impacting_factors.map((f, i) => (
-                        <div key={`imp-${i}`} className="flex items-center gap-2 p-2 border rounded hover:shadow-lg transition cursor-pointer">
-                          <span className={`w-3 h-3 rounded-full ${f.toLowerCase().includes("high") ? "bg-red-500" : f.toLowerCase().includes("medium") ? "bg-red-400" : "bg-red-500"}`} />
+                        <div
+                          key={`imp-${i}`}
+                          className="flex items-center gap-2 p-2 border rounded hover:shadow-lg transition cursor-pointer"
+                        >
+                          <span
+                            className={`w-3 h-3 rounded-full ${
+                              f.toLowerCase().includes("high")
+                                ? "bg-red-500"
+                                : f.toLowerCase().includes("medium")
+                                ? "bg-red-400"
+                                : "bg-red-500"
+                            }`}
+                          />
                           <span>{f}</span>
                         </div>
                       ))
                     ) : (
-                      <div className="text-green-700">No major issues found — building appears efficient.</div>
+                      <div className="text-green-700">
+                        No major issues found — building appears efficient.
+                      </div>
                     )}
                   </div>
                 </div>
 
                 <div className="mt-4">
-                  <h3 className="font-semibold text-gray-700 mb-2">Recommendations</h3>
+                  <h3 className="font-semibold text-gray-700 mb-2">
+                    Recommendations
+                  </h3>
                   <div className="flex flex-wrap gap-3">
                     {result.recommendations?.length ? (
                       result.recommendations.map((r, i) => (
-                        <div key={`rec-inline-${i}`} className="flex items-center gap-2 p-2 border rounded hover:bg-blue-50 transition cursor-pointer">
+                        <div
+                          key={`rec-inline-${i}`}
+                          className="flex items-center gap-2 p-2 border rounded hover:bg-blue-50 transition cursor-pointer"
+                        >
                           <span className="text-blue-500">💡</span>
                           <span>{r}</span>
                         </div>
                       ))
                     ) : (
-                      <div className="text-green-700">No improvements recommended. Excellent performance.</div>
+                      <div className="text-green-700">
+                        No improvements recommended. Excellent performance.
+                      </div>
                     )}
                   </div>
                 </div>
                 {/* ===================== OPTIMIZED PERFORMANCE SECTION ===================== */}
-{result.optimized_energy_month_kwh !== null && (
-  <div className="mt-8 p-4 border rounded-lg bg-green-50 shadow">
-    <h3 className="text-lg font-semibold text-green-800 mb-3">
-      Expected Performance After Improvements
-    </h3>
+                {result.optimized_energy_month_kwh !== null && (
+                  <div className="mt-8 p-4 border rounded-lg bg-green-50 shadow">
+                    <h3 className="text-lg font-semibold text-green-800 mb-3">
+                      Expected Performance After Improvements
+                    </h3>
 
-    <div className="space-y-2 text-sm">
-      <p><strong>Optimized Monthly Energy:</strong> {result.optimized_energy_month_kwh} kWh</p>
-      <p><strong>Energy Savings:</strong> {result.energy_savings_kwh} kWh ({result.energy_savings_percent}%)</p>
-      <p><strong>Optimized EUI:</strong> {result.optimized_eui_kwh_m2} kWh/m²</p>
-      <p><strong>Expected Category:</strong> {result.optimized_category}</p>
-    </div>
-  </div>
-)}
-
+                    <div className="space-y-2 text-sm">
+                      <p>
+                        <strong>Optimized Monthly Energy:</strong>{" "}
+                        {result.optimized_energy_month_kwh} kWh
+                      </p>
+                      <p>
+                        <strong>Energy Savings:</strong>{" "}
+                        {result.energy_savings_kwh} kWh (
+                        {result.energy_savings_percent}%)
+                      </p>
+                      <p>
+                        <strong>Optimized EUI:</strong>{" "}
+                        {result.optimized_eui_kwh_m2} kWh/m²
+                      </p>
+                      <p>
+                        <strong>Expected Category:</strong>{" "}
+                        {result.optimized_category}
+                      </p>
+                    </div>
+                  </div>
+                )}
 
                 <div className="mt-6 flex flex-wrap gap-3">
-                  <button onClick={handleDownload} className="px-4 py-2 border rounded bg-blue-600 text-white hover:bg-blue-700 transition flex items-center gap-1">⬇️ Download Report (PDF)</button>
-                  <button onClick={onPredictAgainSame} className="px-4 py-2 border rounded bg-green-200 hover:bg-gray-100 transition flex items-center gap-1">🔄 Predict Again (Same)</button>
-                  <button onClick={onPredictAgainDifferent} className="px-4 py-2 border rounded hover:bg-gray-100 transition flex items-center gap-1">🔄 New</button>
-                  <button onClick={onExit} className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 transition flex items-center gap-1">❌ Exit</button>
+                  <button
+                    onClick={handleDownload}
+                    className="px-4 py-2 border rounded bg-blue-600 text-white hover:bg-blue-700 transition flex items-center gap-1"
+                  >
+                    ⬇️ Download Report (PDF)
+                  </button>
+                  <button
+                    onClick={onPredictAgainSame}
+                    className="px-4 py-2 border rounded bg-green-200 hover:bg-gray-100 transition flex items-center gap-1"
+                  >
+                    🔄 Predict Again (Same)
+                  </button>
+                  <button
+                    onClick={onPredictAgainDifferent}
+                    className="px-4 py-2 border rounded hover:bg-gray-100 transition flex items-center gap-1"
+                  >
+                    🔄 New
+                  </button>
+                  <button
+                    onClick={onExit}
+                    className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 transition flex items-center gap-1"
+                  >
+                    ❌ Exit
+                  </button>
                 </div>
               </div>
             )}
 
-            {sessionEnded && <div className="mt-4 text-gray-600">Session ended.</div>}
+            {sessionEnded && (
+              <div className="mt-4 text-gray-600">Session ended.</div>
+            )}
           </div>
         </div>
 
@@ -1322,7 +1958,10 @@ export default function PredictPage() {
       </div>
 
       {/* Upgrade modal when trials exhausted */}
-      <UpgradeModal open={showUpgradeModal} onClose={() => setShowUpgradeModal(false)} />
+      <UpgradeModal
+        open={showUpgradeModal}
+        onClose={() => setShowUpgradeModal(false)}
+      />
     </div>
   );
 }

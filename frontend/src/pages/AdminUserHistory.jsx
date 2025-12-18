@@ -177,7 +177,7 @@ export function PredictionDetails({ item, onBack }) {
 
               <div className="grid md:grid-cols-2 gap-x-8 gap-y-3">
                 {Object.entries(fields).map(([label, value]) => (
-                  <p key={label} className="flex justify-between">
+                  <p key={label} className="sm:flex justify-between">
                     <span className="font-medium text-gray-600">
                       {label.replace(/_/g, " ")}:
                     </span>
@@ -238,7 +238,7 @@ export default function AdminUserHistory() {
 
   if (!data)
     return (
-      <h1 className="text-center text-blue-600 mt-32 text-2xl font-semibold">
+      <h1 className="text-center text-blue-600 mt-16 lg:mt-24 text-2xl font-semibold">
         Loading User History...
       </h1>
     );

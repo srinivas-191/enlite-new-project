@@ -134,11 +134,13 @@ function NavItem({ to, label, setOpen }) {
         to={to}
         onClick={() => setOpen && setOpen(false)}
         className={({ isActive }) =>
-          `inline-block p-2 px-3 transition no-underline 
+          `relative py-2 px-3 transition no-underline group
           ${isActive ? "bg-sia-blue text-white rounded-md" : "text-black"}`
         }
       >
         {label}
+        {/* The Animated Underline */}
+        <span className="absolute left-0 bottom-0 w-0 h-[2px] bg-sia-blue transition-all duration-500 ease-in-out group-hover:w-full"></span>
       </NavLink>
     </li>
   );
