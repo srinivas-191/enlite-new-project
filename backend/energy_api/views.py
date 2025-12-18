@@ -6,7 +6,8 @@ from django.conf import settings
 from django.shortcuts import get_object_or_404
 from django.contrib.auth import authenticate, get_user_model
 from django.db.models import Count
-from django.core.mail import send_mail
+#from django.core.mail import send_mail
+from .utils.emails import send_email
 from django.utils import timezone
 import razorpay
 import hmac
@@ -305,13 +306,12 @@ def register_user(request):
     )
 
     try:
-        send_mail(
+        send_email(
             subject="Welcome — Your account has been created",
             message=f"Hello {username}, your account has been created.",
-            from_email=getattr(settings, "DEFAULT_FROM_EMAIL", None),
-            recipient_list=[email],
-            fail_silently=False,
+            to_email=email
         )
+
     except:
         pass
 
@@ -367,12 +367,15 @@ def forgot_password_request(request):
     PasswordResetOTP.objects.create(user=user, otp=otp)
 
     try:
-        send_mail(
+        send_email(
             subject="Your Password Reset OTP",
             message=f"Your OTP is: {otp}",
-            from_email=getattr(settings, "DEFAULT_FROM_EMAIL", None),
-            recipient_list=[email],
+            to_email=email
         )
+    except Exception as e:
+        print("❌ OTP EMAIL FAILED:", repr(e))
+        raise e   # ⬅️ VERY IMPORTANT
+
     except:
         return Response({"error": "Failed to send OTP"}, status=500)
 
@@ -875,7 +878,7 @@ def verify_razorpay_payment(request):
 
     # 📧 Email (non-blocking)
     try:
-        send_mail(
+        send_email(
             subject="✅ Your Enlite Subscription is Active",
             message=(
                 f"Hello {request.user.username},\n\n"
@@ -885,9 +888,7 @@ def verify_razorpay_payment(request):
                 f"Predictions Allowed: {sub.allowed_predictions}\n\n"
                 f"Thank you for choosing Enlite!"
             ),
-            from_email=getattr(settings, "DEFAULT_FROM_EMAIL", None),
-            recipient_list=[request.user.email],
-            fail_silently=True,
+            to_email=request.user.email
         )
     except Exception as e:
         print("Email failed:", e)

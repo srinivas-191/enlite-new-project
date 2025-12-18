@@ -10,14 +10,15 @@ from .views import (
 
     register_user,
     login_user,
+    get_username_by_email,
 
     forgot_password_request,
     verify_otp,
     reset_password,
 
     get_profile,
-    get_username_by_email,
     update_user,
+    get_username_by_email,
 
     get_my_history,
     delete_all_history,
@@ -44,7 +45,6 @@ urlpatterns = [
     path("register/", register_user),
     path("login/", login_user),
     path("get-username-by-email/", get_username_by_email),
-
 
     # Password reset
     path("forgot-password/request/", forgot_password_request),
