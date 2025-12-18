@@ -7,11 +7,13 @@ from django.conf import settings
 
 def send_email(subject, message, to_email):
     try:
+        html_message = message.replace("\n", "<br>")
         email = Mail(
             from_email=settings.DEFAULT_FROM_EMAIL,
             to_emails=to_email,
             subject=subject,
             plain_text_content=message,
+            html_content=html_message
         )
 
         sg = SendGridAPIClient(os.getenv("SENDGRID_API_KEY"))

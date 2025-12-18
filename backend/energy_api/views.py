@@ -308,14 +308,22 @@ def register_user(request):
     try:
         send_email(
             subject="Welcome — Your account has been created",
-            message=(
-                f"Hello {username}, Welcome to Enlite! Your account has been successfully created.\n\n"
-                f"your account has been created\n\n"
-                f"Thank you for choosing us as your partner in building intelligence. With Enlite, you can now leverage advanced analytics to predict building measurements and gain deep insights into energy consumption patterns.\n"
-                f"Our platform is designed not only to track your current usage but to provide actionable paths for future efficiency improvements.\n"
-                f"We are excited to help you start your journey toward smarter energy management. Best regards,\n\n"
-                f"Rajoli Srinivas - The Enlite Team"
-            ),
+            message = f"""
+                Hello {username},
+
+                Welcome to Enlite! Your account has been successfully created.
+
+                Thank you for choosing us as your partner in building intelligence. With Enlite, you can now leverage advanced analytics to predict building measurements and gain deep insights into energy consumption patterns. 
+
+                Our platform is designed not only to track your current usage but to provide actionable paths for future efficiency improvements.
+
+                We are excited to help you start your journey toward smarter energy management.
+
+                Best regards,
+
+                Rajoli Srinivas
+                The Enlite Team
+                """,
             to_email=email
         )
 
@@ -377,16 +385,22 @@ def forgot_password_request(request):
     try:
         send_email(
             subject="Your Password Reset OTP",
-            message=(
-                f"Hello {username}, We received a request to reset the password for your Enlite account. To proceed, please use the verification code provided below:\n\n"
-                f"------------------------\n"
-                f"    OTP CODE: {otp}      \n"
-                f"------------------------\n\n"
-                f"This code is required to verify your identity and ensure your account remains secure. Please enter this code on the reset page within the application.\n"
-                f"Security Note: This code is valid for a limited time. If you did not request a password reset, please ignore this email or contact our support team immediately.\n"
-                f"Best regards,\n\n"
-                f"The Enlite Team"
-            ),
+            message = f"""
+                Hello {user.username},
+
+                We received a request to reset the password for your Enlite account. To proceed, please use the verification code provided below:
+
+                ------------------------------------
+                    VERIFICATION CODE: {otp}
+                ------------------------------------
+
+                This code is required to verify your identity. Please enter this code on the reset page within the application.
+
+                Security Note: If you did not request a password reset, please ignore this email or contact our support team immediately.
+
+                Best regards,
+                The Enlite Security Team
+                """,
             to_email=email
         )
     except Exception as e:
