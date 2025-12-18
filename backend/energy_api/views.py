@@ -287,23 +287,6 @@ def register_user(request):
     username = request.data.get("username")
     password = request.data.get("password")
     email = request.data.get("email")
-    subject = "Welcome to Enlite — Your Account is Ready"
-    message = f"""
-    Hello {username},
-
-    Welcome to Enlite! Your account has been successfully created.
-
-    Thank you for choosing us as your partner in building intelligence. With Enlite, you can now leverage advanced analytics to predict building measurements and gain deep insights into energy consumption patterns. 
-
-    Our platform is designed not only to track your current usage but to provide actionable paths for future efficiency improvements.
-
-    We are excited to help you start your journey toward smarter energy management.
-
-    Best regards,
-
-    Rajoli Srinivas
-    The Enlite Team
-        """
 
     if not username or not password or not email:
         return Response({"error": "username, email and password required"}, status=400)
@@ -323,10 +306,16 @@ def register_user(request):
     )
 
     try:
-        
         send_email(
-            subject=subject,
-            message=message,
+            subject="Welcome — Your account has been created",
+            message=(
+                f"Hello {username}, Welcome to Enlite! Your account has been successfully created.\n\n"
+                f"your account has been created\n\n"
+                f"Thank you for choosing us as your partner in building intelligence. With Enlite, you can now leverage advanced analytics to predict building measurements and gain deep insights into energy consumption patterns.\n"
+                f"Our platform is designed not only to track your current usage but to provide actionable paths for future efficiency improvements.\n"
+                f"We are excited to help you start your journey toward smarter energy management. Best regards,\n\n"
+                f"Rajoli Srinivas - The Enlite Team"
+            ),
             to_email=email
         )
 
@@ -373,6 +362,7 @@ def login_user(request):
 # -------------------------
 @api_view(["POST"])
 def forgot_password_request(request):
+    username = request.data.get("username")
     email = request.data.get("email")
     if not email:
         return Response({"error": "Email required"}, status=400)
@@ -384,36 +374,30 @@ def forgot_password_request(request):
     otp = str(random.randint(100000, 999999))
     PasswordResetOTP.objects.create(user=user, otp=otp)
 
-    # Professional industrial-style message
-    subject = "Reset Your Enlite Account Password"
-    message = f"""
-    Hello {user.username},
-
-    We received a request to reset the password for your Enlite account. To proceed, please use the verification code provided below:
-
-    ------------------------
-    OTP CODE: {otp}
-    ------------------------
-
-    This code is required to verify your identity and ensure your account remains secure. Please enter this code on the reset page within the application.
-
-    Security Note: This code is valid for a limited time. If you did not request a password reset, please ignore this email or contact our support team immediately.
-
-    Best regards,
-    The Enlite Security Team
-        """
-
     try:
         send_email(
-            subject=subject,
-            message=message,
+            subject="Your Password Reset OTP",
+            message=(
+                f"Hello {username}, We received a request to reset the password for your Enlite account. To proceed, please use the verification code provided below:\n\n"
+                f"------------------------\n"
+                f"    OTP CODE: {otp}      \n"
+                f"------------------------\n\n"
+                f"This code is required to verify your identity and ensure your account remains secure. Please enter this code on the reset page within the application.\n"
+                f"Security Note: This code is valid for a limited time. If you did not request a password reset, please ignore this email or contact our support team immediately.\n"
+                f"Best regards,\n\n"
+                f"The Enlite Team"
+            ),
             to_email=email
         )
     except Exception as e:
         print("❌ OTP EMAIL FAILED:", repr(e))
+        raise e   # ⬅️ VERY IMPORTANT
+
+    except:
         return Response({"error": "Failed to send OTP"}, status=500)
 
-    return Response({"message": "OTP sent successfully"})
+    return Response({"message": "OTP sent"})
+
 
 @api_view(["POST"])
 def verify_otp(request):
