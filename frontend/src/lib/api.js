@@ -14,7 +14,7 @@ import axios from "axios";
 
 export const API_BASE =
   import.meta.env.VITE_API_BASE ||
-  "https://enlite-new-project-1.onrender.com/api/health/";
+  "https://enlite-new-project-1.onrender.com/api/";
 
 //latest
 // export const API_BASE =
@@ -120,5 +120,13 @@ export async function apiPostForm(path, formData) {
   } catch (err) {
     console.error("FORM POST ERROR:", path, err.response?.data || err);
     throw err;
+  }
+}
+
+export async function wakeBackend() {
+  try {
+    await apiGet("/health/");
+  } catch {
+    // ignore — backend may still be waking
   }
 }

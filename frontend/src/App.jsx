@@ -1,5 +1,5 @@
 import React, { Suspense, useEffect } from "react";
-import { apiGet } from "./lib/api";
+import { wakeBackend } from "./lib/api";
 import { Routes, Route, Navigate } from "react-router-dom";
 import Navbar from "./components/Navbar";
 import Footer from "./components/Footer";
@@ -7,6 +7,7 @@ import "./app.css";
 import ScrollToTop from "./components/ScrollToTop";
 import PrivateRoute from "./components/PrivateRoute";
 import PricingPage from "./pages/PricingPage";
+
 //import InvoicePage from "./pages/InvoicePage";
 //import AdminManualRequests from "./pages/AdminManualRequests";
 // Lazy imports
@@ -27,9 +28,11 @@ const ResetPasswordPage = React.lazy(() => import("./pages/ResetPasswordPage"));
 const OtpVerifyPage = React.lazy(() => import("./pages/OtpVerifyPage"));
 
 const App = () => {
+;
   useEffect(() => {
-  apiGet("/health/").catch(() => {});
-}, []);
+    wakeBackend();
+  }, []);
+
 
   return (
     <div className="min-h-screen bg-[#FCF5EE]  text-gray-900">
