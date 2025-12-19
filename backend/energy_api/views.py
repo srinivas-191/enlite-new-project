@@ -30,6 +30,12 @@ from .models import (
     PasswordResetOTP,
 )
 
+from django.http import JsonResponse
+
+def health_check(request):
+    return JsonResponse({"status": "ok"})
+
+
 User = get_user_model()
 
 # -------------------------

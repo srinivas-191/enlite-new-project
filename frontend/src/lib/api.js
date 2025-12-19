@@ -14,7 +14,7 @@ import axios from "axios";
 
 export const API_BASE =
   import.meta.env.VITE_API_BASE ||
-  "https://enlite-new-project-1.onrender.com/api/";
+  "https://enlite-new-project-1.onrender.com/api/health/";
 
 //latest
 // export const API_BASE =

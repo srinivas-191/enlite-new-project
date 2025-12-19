@@ -1,4 +1,5 @@
-import React, { Suspense } from "react";
+import React, { Suspense, useEffect } from "react";
+import { apiGet } from "./lib/api";
 import { Routes, Route, Navigate } from "react-router-dom";
 import Navbar from "./components/Navbar";
 import Footer from "./components/Footer";
@@ -24,7 +25,12 @@ const AdminUserHistory = React.lazy(() => import("./pages/AdminUserHistory"));
 const ForgotPasswordPage = React.lazy(() => import("./pages/ForgotPasswordPage"));
 const ResetPasswordPage = React.lazy(() => import("./pages/ResetPasswordPage"));
 const OtpVerifyPage = React.lazy(() => import("./pages/OtpVerifyPage"));
+
 const App = () => {
+  useEffect(() => {
+  apiGet("/health/").catch(() => {});
+}, []);
+
   return (
     <div className="min-h-screen bg-[#FCF5EE]  text-gray-900">
       {/* Navbar */}

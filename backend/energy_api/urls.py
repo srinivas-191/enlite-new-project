@@ -4,6 +4,7 @@ from django.conf import settings
 from django.conf.urls.static import static
 
 from .views import (
+    health_check,
     get_building_types,
     get_defaults,
     predict_energy,
@@ -37,6 +38,7 @@ from .views import (
 
 urlpatterns = [
     # Core
+    path("health/", health_check),
     path("building-types/", get_building_types),
     path("defaults/", get_defaults),
     path("predict/", predict_energy),
